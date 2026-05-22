@@ -1,0 +1,580 @@
+@font-face {
+  font-family: "AlibabaSans";
+  font-style: normal;
+  font-weight: 300;
+  font-display: swap;
+  src: url("//mdn.alipayobjects.com/huamei_iwk9zp/afts/file/A*1GSgSYDD_aIAAAAAQsAAAAgAegCCAQ/AlibabaSans-Light.woff2")
+    format("woff2");
+}
+@font-face {
+  font-family: "AlibabaSans";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("//mdn.alipayobjects.com/huamei_iwk9zp/afts/file/A*2zEUQqnPNesAAAAAQtAAAAgAegCCAQ/AlibabaSans-Regular.woff2")
+    format("woff2");
+}
+@font-face {
+  font-family: "AlibabaSans";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("//mdn.alipayobjects.com/huamei_iwk9zp/afts/file/A*E_cxRbMlZqUAAAAAQuAAAAgAegCCAQ/AlibabaSans-Medium.woff2")
+    format("woff2");
+}
+@font-face {
+  font-family: "AlibabaSans";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("//mdn.alipayobjects.com/huamei_iwk9zp/afts/file/A*E_cxRbMlZqUAAAAAQuAAAAgAegCCAQ/AlibabaSans-Bold.woff2")
+    format("woff2");
+}
+@font-face {
+  font-family: "AlibabaSans";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("//mdn.alipayobjects.com/huamei_iwk9zp/afts/file/A*E_cxRbMlZqUAAAAAQuAAAAgAegCCAQ/AlibabaSans-Heavy.woff2")
+    format("woff2");
+}
+@font-face {
+  font-family: "Eastape";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("~@/constants/Font/三极泼墨体.ttf") format("truetype");
+}
+
+/* ===== 全局主题变量 ===== */
+:root {
+  --brand: #164A41;
+  --brand-accent: #E8A838;
+  --brand-soft: #FDF8EE;
+  --surface: #FFFFFF;
+  --bg: #F6F7F5;
+  --bg-gradient: linear-gradient(160deg, #f0f4f3 0%, #e8ede9 30%, #f6f7f5 60%, #fdf8ee 100%);
+  --text: #1A2E28;
+  --text-2: #5A7268;
+  --text-3: #8FA69A;
+  --border: rgba(22, 74, 65, 0.08);
+  --glass: rgba(255, 255, 255, 0.72);
+  --nav-h: 64px;
+  --nav-radius: 18px;
+  --nav-margin: 16px;
+  --page-max: 1100px;
+  --page-pad-x: 32px;
+  --page-pad-top: 8px;
+  --page-pad-bottom: 48px;
+  --app-modal-width: 600px;
+  --app-modal-max-height: 600px;
+}
+
+:root[data-theme='dark'] {
+  --brand: #8fd9c7;
+  --brand-accent: #d9b86b;
+  --brand-soft: #14201d;
+  --surface: #101816;
+  --bg: #07100e;
+  --bg-gradient: linear-gradient(160deg, #07100e 0%, #0a1311 24%, #0d1714 52%, #111a17 100%);
+  --text: #edf5f2;
+  --text-2: #bfd0ca;
+  --text-3: #879b95;
+  --border: rgba(143, 217, 199, 0.16);
+  --glass: rgba(16, 24, 22, 0.88);
+}
+
+@media (max-width: 768px) {
+  :root {
+    --nav-h: 56px;
+    --nav-radius: 16px;
+    --nav-margin: 10px;
+    --page-pad-x: 16px;
+    --page-pad-top: 16px;
+    --page-pad-bottom: 32px;
+  }
+}
+
+@media (max-width: 480px) {
+  :root {
+    --nav-h: 52px;
+    --nav-radius: 14px;
+    --nav-margin: 8px;
+    --page-pad-x: 16px;
+    --page-pad-top: 12px;
+    --page-pad-bottom: 24px;
+  }
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  min-height: 100%;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  font-family:
+    AlibabaSans, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans',
+    sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
+}
+
+html {
+  overflow-y: scroll !important;
+  scrollbar-gutter: stable;
+  background: var(--bg-gradient);
+}
+
+.colorWeak {
+  filter: invert(80%);
+}
+
+body {
+  position: relative;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background: var(--bg-gradient);
+  color: var(--text);
+  overflow-x: clip;
+  overflow-y: visible;
+  padding-right: 0 !important;
+  margin-right: 0 !important;
+  transition: background 0.28s ease, color 0.28s ease;
+}
+
+.app-modal-standard {
+  :global {
+    .ant-modal {
+      width: min(var(--app-modal-width), calc(100vw - 32px)) !important;
+      max-width: calc(100vw - 32px) !important;
+    }
+
+    .ant-modal-content {
+      border-radius: 16px;
+      overflow: hidden;
+    }
+
+    .ant-modal-body {
+      max-height: min(var(--app-modal-max-height), calc(100vh - 48px));
+      overflow-y: auto;
+      padding-right: 8px;
+    }
+  }
+}
+
+.app-modal-video {
+  :global {
+    .ant-modal {
+      width: min(800px, calc(100vw - 32px)) !important;
+      max-width: calc(100vw - 32px) !important;
+      border-radius: 16px;
+      overflow: hidden;
+    }
+  }
+}
+
+html.auth-page,
+body.auth-page {
+  overflow: hidden !important;
+}
+
+html.app-overlay-lock,
+body.app-overlay-lock {
+  overflow: hidden !important;
+  overscroll-behavior: none !important;
+}
+
+#root {
+  background: inherit;
+  min-height: 100%;
+  padding-right: 0 !important;
+  margin-right: 0 !important;
+}
+
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: var(--bg-gradient);
+  z-index: -1;
+  pointer-events: none;
+  transition: background 0.28s ease;
+}
+
+ul,
+ol {
+  list-style: none;
+}
+
+canvas {
+  display: block;
+}
+
+/* 清除 ProLayout 残留样式 */
+.ant-layout {
+  min-height: 100vh;
+  background: transparent !important;
+  padding-right: 0 !important;
+  margin-right: 0 !important;
+}
+
+.ant-layout-content {
+  padding: 0 !important;
+  margin: 0 !important;
+}
+
+.ant-pro-layout {
+  min-height: 100vh;
+  background: transparent !important;
+  padding-right: 0 !important;
+  margin-right: 0 !important;
+
+  .ant-pro-sider {
+    display: none !important;
+  }
+  .ant-pro-grid-content {
+    padding: 0 !important;
+  }
+  .ant-pro-basicLayout-content {
+    margin: 0 !important;
+  }
+}
+
+.ant-pro-page-container-children-container {
+  padding-right: 0 !important;
+  padding-left: 0 !important;
+}
+
+:root[data-theme='dark'] {
+  body {
+    color-scheme: dark;
+  }
+
+  .navbar,
+  .navbar.scrolled,
+  .noticePanel,
+  .dropdown,
+  .admin-main-card,
+  .stat-card,
+  .glass-card,
+  .wc-model-panel,
+  .wc-exercises-section,
+  .ex-today-card,
+  .ex-today-rec,
+  .exercise-filter-panel,
+  .fav-content-shell,
+  .fav-empty,
+  .ex-content-shell,
+  .ex-empty,
+  .record-detail-item,
+  .profile-record-sheet,
+  .profile-ai-sheet,
+  .ex-today-sheet,
+  .ex-diet-sheet,
+  .training-timer-sheet,
+  .ant-modal-content {
+    background: #101816 !important;
+    border-color: rgba(143, 217, 199, 0.14) !important;
+    box-shadow: 0 18px 42px rgba(0, 0, 0, 0.34) !important;
+  }
+
+  .navCenter,
+  .exercise-search-bar .ant-input-affix-wrapper,
+  .exercise-filter-btn,
+  .noticePanelAction,
+  .noticeDeleteBtn,
+  .noticeSelectBtn,
+  .ex-today-rec-fav,
+  .today-record-item,
+  .profile-bar-track,
+  .record-detail-close,
+  .wc-model-wrap {
+    background: rgba(255, 255, 255, 0.04) !important;
+    border-color: rgba(143, 217, 199, 0.14) !important;
+  }
+
+  .wc-model-wrap:hover {
+    background: rgba(255, 255, 255, 0.055) !important;
+    border-color: rgba(143, 217, 199, 0.24) !important;
+    box-shadow: 0 16px 30px rgba(0, 0, 0, 0.22) !important;
+  }
+
+  .ex-today-rec-model-label {
+    background: rgba(8, 16, 14, 0.88) !important;
+    border: 1px solid rgba(143, 217, 199, 0.18) !important;
+    color: #e6f4ef !important;
+    box-shadow: 0 10px 22px rgba(0, 0, 0, 0.28) !important;
+  }
+
+  .ex-today-rec-pill,
+  .ex-today-rec-badge {
+    background: rgba(143, 217, 199, 0.10) !important;
+    color: #d8ebe5 !important;
+    border: 1px solid rgba(143, 217, 199, 0.14) !important;
+  }
+
+  .chat-header,
+  .chat-input-row,
+  .chat-model-select {
+    background: rgba(255, 255, 255, 0.045) !important;
+    border-color: rgba(143, 217, 199, 0.16) !important;
+  }
+
+  .chat-window {
+    background: rgba(10, 18, 16, 0.94) !important;
+    border-color: rgba(143, 217, 199, 0.16) !important;
+  }
+
+  .chat-bubble-ai,
+  .chat-msg-welcome .chat-bubble-ai {
+    background: rgba(255, 255, 255, 0.055) !important;
+    border-color: rgba(143, 217, 199, 0.16) !important;
+    color: var(--text) !important;
+    box-shadow: 0 14px 30px rgba(0, 0, 0, 0.22) !important;
+  }
+
+  .chat-header-name,
+  .chat-model-label,
+  .chat-bubble-text,
+  .chat-input-field.ant-input-textarea textarea {
+    color: var(--text) !important;
+  }
+
+  .chat-header-desc,
+  .chat-input-hint,
+  .chat-quote-text,
+  .chat-time-divider span {
+    color: var(--text-3) !important;
+  }
+
+  .chat-time-divider span {
+    background: rgba(255, 255, 255, 0.04) !important;
+  }
+
+  .chat-input-field.ant-input-textarea textarea::placeholder {
+    color: rgba(191, 208, 202, 0.6) !important;
+  }
+
+  .navIndicator,
+  .noticeCard,
+  .exercise-filter-btn-active,
+  .ant-table-tbody > tr > td,
+  .ant-table-thead > tr > th {
+    background: rgba(255, 255, 255, 0.03) !important;
+  }
+
+  .ant-input,
+  .ant-input-affix-wrapper,
+  .ant-input-number,
+  .ant-input-number-input,
+  .ant-select-selector,
+  .ant-input-textarea textarea {
+    background: rgba(255, 255, 255, 0.03) !important;
+    border-color: rgba(143, 217, 199, 0.14) !important;
+    color: var(--text) !important;
+  }
+
+  .ant-input::placeholder,
+  .ant-input-textarea textarea::placeholder,
+  .ant-input-number input::placeholder {
+    color: var(--text-3) !important;
+  }
+
+  .ant-btn-default,
+  .ant-btn:not(.ant-btn-primary) {
+    background: rgba(255, 255, 255, 0.04) !important;
+    border-color: rgba(143, 217, 199, 0.14) !important;
+    color: var(--text) !important;
+  }
+
+  .ant-btn-primary,
+  .ex-today-rec-goto,
+  .profile-ai-sheet-foot .ant-btn-primary,
+  .ex-diet-sheet-foot .ant-btn-primary {
+    background: #1d5d51 !important;
+    border-color: #1d5d51 !important;
+    color: #f4fbf8 !important;
+  }
+
+  .ant-modal-header,
+  .noticePanelHead,
+  .admin-toolbar,
+  .profile-record-sheet-head,
+  .profile-ai-sheet-head,
+  .ex-today-sheet-head,
+  .ex-diet-sheet-head {
+    background: transparent !important;
+    border-color: rgba(143, 217, 199, 0.12) !important;
+  }
+
+  .custom-layout {
+    background: linear-gradient(170deg, #07100e 0%, #0b1412 28%, #0f1815 62%, #131c19 100%) !important;
+  }
+
+  .custom-layout-main,
+  .wc-page,
+  .ex-page-shell,
+  .fav-page,
+  .profile-page,
+  .admin-page {
+    background: transparent !important;
+  }
+
+  .wc-container,
+  .ex-page,
+  .fav-page,
+  .profile-container {
+    position: relative;
+  }
+
+  .wc-container::before,
+  .ex-page::before,
+  .fav-page::before,
+  .profile-container::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 24px;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.015), rgba(255, 255, 255, 0));
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .wc-container > *,
+  .ex-page > *,
+  .fav-page > *,
+  .profile-container > * {
+    position: relative;
+    z-index: 1;
+  }
+
+  .wc-hero-title,
+  .ex-hero-lite-title,
+  .fav-hero-lite-title,
+  .profile-hero-title,
+  .admin-header h1 {
+    color: #eef7f3 !important;
+  }
+
+  .wc-hero-sub,
+  .ex-hero-lite-sub,
+  .fav-hero-lite-sub,
+  .profile-hero-sub,
+  .admin-header p {
+    color: #a9beb7 !important;
+  }
+
+  .admin-main-card .ant-pro-card,
+  .admin-main-card .ant-pro-card-body,
+  .admin-main-card .ant-table,
+  .admin-main-card .ant-table-container,
+  .admin-main-card .ant-table-content,
+  .admin-main-card .ant-table-tbody > tr > td {
+    background: #101816 !important;
+    color: var(--text) !important;
+  }
+
+  .admin-main-card .ant-table-thead > tr > th {
+    background: rgba(255, 255, 255, 0.04) !important;
+    color: var(--text) !important;
+    border-color: rgba(143, 217, 199, 0.14) !important;
+  }
+
+  .admin-main-card .ant-table-tbody > tr > td,
+  .admin-main-card .ant-table-row > td,
+  .admin-main-card .ant-checkbox-inner {
+    border-color: rgba(143, 217, 199, 0.12) !important;
+  }
+
+  .admin-main-card .ant-table-tbody > tr:hover > td,
+  .admin-main-card .ant-table-row-selected > td {
+    background: rgba(143, 217, 199, 0.06) !important;
+  }
+
+  .admin-main-card .user-name,
+  .admin-main-card .ant-table-cell,
+  .admin-main-card .ant-pro-table-alert,
+  .admin-main-card .ant-pagination-item a {
+    color: var(--text) !important;
+  }
+
+  .admin-main-card .user-account,
+  .admin-main-card .user-meta,
+  .admin-main-card .body-stats,
+  .admin-main-card .ant-empty-description {
+    color: var(--text-2) !important;
+  }
+
+  .ant-modal-title,
+  .ant-modal-close,
+  .ant-form-item-label > label,
+  .profile-label,
+  .profile-ai-sheet-title,
+  .profile-record-sheet-title {
+    color: var(--text) !important;
+  }
+
+  .ant-form-item-extra,
+  .ant-form-item-explain,
+  .profile-account,
+  .profile-stat-label {
+    color: var(--text-3) !important;
+  }
+
+  .ant-select-selection-item,
+  .ant-select-selection-placeholder,
+  .ant-input,
+  .ant-input-affix-wrapper,
+  .ant-input-number-input,
+  .ant-radio-button-wrapper,
+  .ant-input-textarea textarea {
+    color: var(--text) !important;
+  }
+
+  .ant-input-group-addon,
+  .ant-input-number-group-addon {
+    color: var(--text-2) !important;
+    background: rgba(255, 255, 255, 0.04) !important;
+    border-color: rgba(143, 217, 199, 0.14) !important;
+  }
+}
+
+.admin-page {
+  width: 100%;
+  min-height: 100%;
+  padding: 0;
+  margin: 0;
+}
+
+.custom-layout,
+.custom-layout-main {
+  padding-right: 0 !important;
+  margin-right: 0 !important;
+}
+
+/* 弹窗打开时禁止 body 滚动但不偏移布局 */
+body.ant-scrolling-effect {
+  overflow: hidden !important;
+  overflow-x: clip !important;
+  padding-right: 0 !important;
+  margin-right: 0 !important;
+  width: auto !important;
+}
+
+@media (max-width: 768px) {
+  .ant-table {
+    width: 100%;
+    overflow-x: auto;
+    &-thead > tr,
+    &-tbody > tr {
+      > th,
+      > td {
+        white-space: pre;
+        > span {
+          display: block;
+        }
+      }
+    }
+  }
+}

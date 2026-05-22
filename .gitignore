@@ -1,0 +1,42 @@
+# Build
+target/
+dist/
+*.jar
+*.class
+
+# IDE
+.idea/
+*.iml
+*.iws
+.vscode/
+.settings/
+.project
+.classpath
+.factorypath
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Node
+node_modules/
+
+# Sensitive configs - 不提交生产配置和密钥
+Fitness-backend/src/main/resources/application-prod.yml
+docker-compose.yml
+.env
+.env.local
+.env.production
+
+# Chroma data
+chroma/
+
+# Upload
+videos/
+
+# Maven
+.mvn/wrapper/maven-wrapper.jar
+
+# Nested git repo
+Fitness-backend/Git/
+Fitness-frontend/Git/

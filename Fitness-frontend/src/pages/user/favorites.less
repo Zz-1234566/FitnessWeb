@@ -1,0 +1,183 @@
+/* ===== 页面容器 ===== */
+.fav-page {
+  padding: var(--page-pad-top) var(--page-pad-x) var(--page-pad-bottom);
+  width: 100%;
+  max-width: var(--page-max);
+  margin: 0 auto;
+  box-sizing: border-box;
+}
+
+.fav-hero-lite {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0;
+  margin: 8px 0 20px;
+  min-height: 76px;
+}
+
+.fav-hero-lite-title {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+  color: var(--text);
+  min-height: 32px;
+  height: 32px;
+  white-space: nowrap;
+}
+
+.fav-hero-lite-sub {
+  margin: 4px 0 0;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text-3);
+  min-height: 38px;
+  height: 38px;
+}
+
+.fav-result-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 18px;
+  padding: 0 4px;
+}
+
+.fav-result-count {
+  font-size: 13px;
+  color: var(--text-3);
+}
+
+.fav-result-progress {
+  font-size: 12px;
+  color: var(--text-3);
+}
+
+.fav-result-count strong,
+.fav-result-progress strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.fav-content-shell {
+  min-height: 720px;
+}
+
+/* ===== 卡片网格 ===== */
+.fav-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr));
+  gap: 20px;
+}
+
+.fav-load-more {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 20px 0 8px;
+  color: var(--text-3);
+}
+
+.fav-load-more-line {
+  width: 48px;
+  height: 1px;
+  background: rgba(22, 74, 65, 0.12);
+}
+
+.fav-load-more-text {
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+/* ===== 空状态 ===== */
+.fav-empty {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 400px;
+}
+
+.fav-empty-inner {
+  text-align: center;
+}
+
+.fav-empty-illust {
+  width: 80px;
+  height: 80px;
+  border-radius: 18px;
+  background: rgba(22, 74, 65, 0.06);
+  border: 1px solid rgba(22, 74, 65, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 20px;
+  font-size: 32px;
+  color: var(--text-3);
+}
+
+.fav-empty-title {
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--text-2);
+  margin-bottom: 6px;
+}
+
+.fav-empty-desc {
+  font-size: 13px;
+  color: var(--text-3);
+}
+
+/* ===== 视频弹窗 ===== */
+.fav-video-modal .ant-modal-body {
+  padding: 0 !important;
+  display: flex;
+  justify-content: center;
+  background: #000;
+}
+
+.fav-video-modal .ant-modal {
+  border-radius: 16px !important;
+  overflow: hidden;
+}
+
+/* ===== 响应式 — 平板 ===== */
+@media (max-width: 768px) {
+  .fav-hero-lite { margin: 12px 0 16px; min-height: 71px; }
+  .fav-hero-lite-title { font-size: 22px; min-height: 29px; height: 29px; }
+  .fav-hero-lite-sub { font-size: 13px; min-height: 42px; height: 42px; }
+  .fav-content-shell { min-height: 560px; }
+  .fav-grid { grid-template-columns: 1fr 1fr; gap: 14px; }
+}
+
+/* ===== 响应式 — 手机 ===== */
+@media (max-width: 480px) {
+  .fav-hero-lite { margin: 14px 0 10px; min-height: 72px; }
+  .fav-hero-lite-title { font-size: 20px; min-height: 26px; height: 26px; }
+  .fav-hero-lite-sub { margin-top: 4px; min-height: 38px; height: 38px; }
+  .fav-content-shell { min-height: 460px; }
+  .fav-grid { grid-template-columns: 1fr; }
+
+  .fav-empty {
+    min-height: 300px;
+  }
+
+  .fav-empty-illust {
+    width: 64px;
+    height: 64px;
+    font-size: 26px;
+  }
+
+  .fav-empty-title {
+    font-size: 15px;
+  }
+
+  .fav-video-modal .ant-modal {
+    max-width: 100vw !important;
+    margin: 0 !important;
+    top: 0 !important;
+    border-radius: 0 !important;
+  }
+}

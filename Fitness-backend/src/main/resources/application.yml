@@ -1,0 +1,80 @@
+spring:
+  application:
+     name: user-center
+  jackson:
+    time-zone: Asia/Shanghai
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://localhost:3306/ZZ
+    username: root
+    password: ${MYSQL_PASSWORD:admin}
+  session:
+    timeout: 86400
+  main:
+    banner-mode: log
+  ai:
+    openai:
+      base-url: https://dashscope.aliyuncs.com/compatible-mode
+      api-key: ${QWEN_API_KEY}
+      embedding:
+        options:
+          model: text-embedding-v3
+    vectorstore:
+      chroma:
+        client:
+          host: http://localhost
+          port: 81
+        collection-name: fitness_knowledge
+        initialize-schema: true
+
+server:
+  port: 8080
+  servlet:
+    context-path: /api
+    session:
+      cookie:
+        max-age: 604800
+      timeout: 86400
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: false
+  global-config:
+    db-config:
+      logic-delete-field: isDelete
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+
+ai:
+  default-model: qwen3.6-plus
+  max-tokens: 2048
+  temperature: 0.7
+  providers:
+    - name: qwen3.6-plus
+      base-url: https://dashscope.aliyuncs.com/compatible-mode/v1
+      api-key: ${QWEN_API_KEY}
+      model: qwen3.6-plus
+      label: Qwen 3.6 Plus
+    - name: deepseek-v4-flash
+      base-url: https://api.deepseek.com/v1
+      api-key: ${DEEPSEEK_API_KEY}
+      model: deepseek-v4-flash
+      label: DeepSeek V4 Flash
+    - name: glm-4-flash
+      base-url: https://open.bigmodel.cn/api/paas/v4
+      api-key: ${GLM_API_KEY}
+      model: glm-4-flash-250414
+      label: ZhiPu GLM-4 Flash
+
+cos:
+  secret-id: ${COS_SECRET_ID}
+  secret-key: ${COS_SECRET_KEY}
+  region: ap-guangzhou
+  bucket: fitness-avatar001-1419900334
+
+file:
+  upload-path: ./videos/
+
+chroma:
+  auto-start: true
+  exec-path: chroma

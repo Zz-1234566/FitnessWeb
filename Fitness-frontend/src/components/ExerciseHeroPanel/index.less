@@ -1,0 +1,217 @@
+.exercise-hero-panel {
+  margin: 16px 0 32px;
+  padding: 24px 28px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(22, 74, 65, 0.08);
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 8px 24px rgba(15, 23, 42, 0.03);
+  min-height: auto;
+}
+
+.exercise-hero-panel::after {
+  display: none;
+}
+
+.exercise-hero-copy {
+  min-width: 0;
+  position: relative;
+  z-index: 1;
+  max-width: 560px;
+}
+
+.exercise-hero-label {
+  display: inline-flex;
+  align-items: center;
+  background: rgba(22, 74, 65, 0.08);
+  color: var(--brand);
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  margin-bottom: 16px;
+  position: relative;
+  z-index: 1;
+}
+
+.exercise-hero-label-dot {
+  display: none;
+}
+
+.exercise-hero-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 6px;
+  position: relative;
+  z-index: 1;
+}
+
+.exercise-hero-icon {
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  background: var(--brand);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  color: #fff;
+  flex-shrink: 0;
+  box-shadow: 0 8px 18px rgba(22, 74, 65, 0.14);
+}
+
+.exercise-hero-title {
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: -0.01em;
+  margin: 0;
+  line-height: 1.2;
+}
+
+.exercise-hero-sub {
+  font-size: 14px;
+  color: var(--text-2);
+  margin: 0 0 18px;
+  position: relative;
+  z-index: 1;
+  max-width: 52ch;
+  line-height: 1.65;
+}
+
+.exercise-hero-stats {
+  display: flex;
+  gap: 28px;
+  position: relative;
+  z-index: 1;
+  flex-wrap: wrap;
+}
+
+.exercise-hero-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  text-align: left;
+  min-width: 88px;
+}
+
+.exercise-hero-stat-val {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: -0.02em;
+}
+
+.exercise-hero-stat-val span {
+  color: var(--brand);
+}
+
+.exercise-hero-stat-label {
+  font-size: 12px;
+  color: var(--text-3);
+  margin-top: 2px;
+}
+
+.exercise-hero-poster {
+  display: none;
+}
+
+.exercise-hero-decor {
+  position: absolute;
+  top: -4px;
+  right: 24px;
+  font-size: clamp(116px, 16vw, 210px);
+  font-weight: 800;
+  font-family: "Eastape", "STKaiti", "KaiTi", cursive;
+  line-height: 0.86;
+  color: rgba(232, 168, 56, 0.09);
+  transform: rotate(-10deg);
+  transform-origin: right top;
+  white-space: nowrap;
+  letter-spacing: 0;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.exercise-hero-quote {
+  position: absolute;
+  top: 42px;
+  right: 38px;
+  max-width: min(36%, 380px);
+  font-family: "Eastape", "STKaiti", "KaiTi", cursive;
+  font-weight: 700;
+  letter-spacing: 0;
+  line-height: 1.14;
+  color: rgba(22, 74, 65, 0.30);
+  white-space: normal;
+  text-align: right;
+  text-rendering: geometricPrecision;
+  font-size: clamp(28px, 3.4vw, 48px);
+  transform: rotate(-7deg);
+  opacity: 0.68;
+}
+
+@media (max-width: 768px) {
+  .exercise-hero-panel {
+    padding: 20px;
+  }
+
+  .exercise-hero-title {
+    font-size: 24px;
+  }
+
+  .exercise-hero-icon {
+    width: 44px;
+    height: 44px;
+    font-size: 20px;
+    border-radius: 14px;
+  }
+
+  .exercise-hero-stats {
+    gap: 24px;
+  }
+
+  .exercise-hero-stat-val {
+    font-size: 20px;
+  }
+}
+
+@media (max-width: 480px) {
+  .exercise-hero-panel {
+    padding: 18px 16px;
+  }
+
+  .exercise-hero-head {
+    gap: 12px;
+  }
+
+  .exercise-hero-title {
+    font-size: 20px;
+  }
+
+  .exercise-hero-sub {
+    font-size: 13px;
+  }
+
+  .exercise-hero-icon {
+    width: 40px;
+    height: 40px;
+    font-size: 18px;
+    border-radius: 12px;
+  }
+
+  .exercise-hero-stats {
+    gap: 18px;
+  }
+
+  .exercise-hero-stat {
+    min-width: calc(50% - 9px);
+  }
+
+  .exercise-hero-stat-val {
+    font-size: 18px;
+  }
+}

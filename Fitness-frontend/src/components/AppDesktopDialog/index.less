@@ -1,0 +1,134 @@
+.app-dialog-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1400;
+  background: rgba(17, 24, 39, 0.26);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px;
+  overscroll-behavior: contain;
+}
+
+.app-dialog-panel {
+  width: min(calc(100vw - 24px), var(--app-modal-width));
+  max-height: min(calc(100vh - 24px), var(--app-modal-max-height));
+  background: rgba(255, 255, 255, 0.97);
+  border: 1px solid rgba(31, 106, 93, 0.08);
+  border-radius: 28px;
+  box-shadow: 0 24px 64px rgba(15, 23, 42, 0.16);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.app-dialog-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 22px 22px 14px;
+  border-bottom: 1px solid rgba(31, 106, 93, 0.08);
+}
+
+.app-dialog-heading {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.app-dialog-title {
+  font-size: 18px;
+  font-weight: 800;
+  color: #163d36;
+  line-height: 1.3;
+}
+
+.app-dialog-subtitle {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-3);
+}
+
+.app-dialog-close {
+  width: 44px;
+  height: 44px;
+  border-radius: 16px;
+  border: none;
+  background: rgba(22, 74, 65, 0.06);
+  color: var(--text-3);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all 0.16s ease;
+
+  &:hover {
+    background: rgba(22, 74, 65, 0.1);
+    color: #163d36;
+  }
+}
+
+.app-dialog-body {
+  padding: 18px 22px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  min-height: 0;
+}
+
+.app-dialog-foot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 50px;
+  padding: 16px 22px 22px;
+  border-top: 1px solid rgba(31, 106, 93, 0.08);
+
+  .ant-btn {
+    flex: 1;
+    min-width: 0;
+    min-height: 52px;
+    padding: 8px 32px;
+    border-radius: 12px;
+    font-size: 14px;
+    font-weight: 700;
+    box-shadow: none;
+  }
+
+  .ant-btn-default {
+    border-color: rgba(22, 74, 65, 0.14);
+    color: #1f6a5d;
+    background: rgba(22, 74, 65, 0.03);
+  }
+
+  .ant-btn-default:hover {
+    border-color: rgba(22, 74, 65, 0.22);
+    color: #184c41;
+    background: rgba(22, 74, 65, 0.05);
+  }
+
+  .ant-btn-primary {
+    border-color: #0e5a4e;
+    background: #0e5a4e;
+  }
+
+  .ant-btn-primary:hover {
+    border-color: #0b483f;
+    background: #0b483f;
+  }
+
+  .ant-btn-dangerous.ant-btn-default {
+    border-color: rgba(220, 38, 38, 0.16);
+    color: #dc2626;
+    background: rgba(220, 38, 38, 0.03);
+  }
+
+  .ant-btn-dangerous.ant-btn-default:hover {
+    border-color: rgba(220, 38, 38, 0.24);
+    color: #b91c1c;
+    background: rgba(220, 38, 38, 0.05);
+  }
+}

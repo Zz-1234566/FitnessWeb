@@ -1,0 +1,464 @@
+.training-timer-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 20, 0.44);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  z-index: 1000;
+}
+
+.training-timer-sheet {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1001;
+  background: rgba(255, 255, 255, 0.96);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-radius: 20px 20px 0 0;
+  padding: 12px 24px 28px;
+  height: 75vh;
+  overflow-y: auto;
+  box-shadow: 0 -16px 48px rgba(15, 23, 20, 0.18);
+}
+
+.training-timer-handle {
+  width: 42px;
+  height: 4px;
+  border-radius: 999px;
+  margin: 0 auto 14px;
+  background: rgba(22, 74, 65, 0.14);
+  touch-action: none;
+}
+
+.training-timer-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.training-timer-head {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+
+  strong {
+    font-size: 18px;
+    line-height: 1.3;
+    color: var(--text);
+  }
+
+  span {
+    font-size: 13px;
+    color: var(--text-3);
+  }
+}
+
+.training-timer-close {
+  flex-shrink: 0;
+  color: var(--text-2) !important;
+  background: rgba(22, 74, 65, 0.05) !important;
+}
+
+.training-timer-setbar {
+  margin-bottom: 24px;
+}
+
+.training-timer-setbar-grid {
+  display: grid;
+  gap: 6px;
+}
+
+.training-timer-setbar-segment {
+  min-height: 34px;
+  border-radius: 10px;
+  background: rgba(22, 74, 65, 0.06);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding-bottom: 6px;
+  font-size: 11px;
+  color: var(--text-3);
+
+  &.is-current {
+    background: rgba(22, 74, 65, 0.14);
+    color: var(--brand);
+  }
+
+  &.is-done {
+    background: #164a41;
+    color: #fff;
+  }
+}
+
+.training-timer-setlabel {
+  text-align: center;
+  font-size: 16px;
+  color: var(--text-2);
+  margin-bottom: 16px;
+
+  &.is-done {
+    color: var(--brand);
+    font-weight: 700;
+  }
+}
+
+.training-timer-setnum {
+  font-size: 30px;
+  font-weight: 800;
+  color: var(--brand);
+  margin-right: 6px;
+}
+
+.training-timer-ring {
+  width: min(220px, 58vw);
+  aspect-ratio: 1;
+  margin: 0 auto 22px;
+  border-radius: 50%;
+  background: radial-gradient(circle at center, rgba(255, 255, 255, 0.95) 0%, rgba(22, 74, 65, 0.06) 72%, rgba(22, 74, 65, 0.12) 100%);
+  border: 1px solid rgba(22, 74, 65, 0.08);
+  box-shadow: inset 0 0 0 10px rgba(255, 255, 255, 0.4);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+
+  &.is-working {
+    background: radial-gradient(circle at center, rgba(255, 255, 255, 0.95) 0%, rgba(22, 74, 65, 0.08) 70%, rgba(22, 74, 65, 0.18) 100%);
+  }
+
+  &.is-paused {
+    background: radial-gradient(circle at center, rgba(255, 255, 255, 0.95) 0%, rgba(93, 106, 100, 0.08) 72%, rgba(93, 106, 100, 0.14) 100%);
+  }
+}
+
+.training-timer-digits {
+  font-size: clamp(48px, 9vw, 72px);
+  line-height: 1;
+  font-weight: 700;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.training-timer-status {
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--text-3);
+}
+
+.training-timer-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.training-timer-stat {
+  border-radius: 14px;
+  border: 1px solid rgba(22, 74, 65, 0.06);
+  background: rgba(22, 74, 65, 0.03);
+  padding: 14px 12px;
+  text-align: center;
+
+  span {
+    display: block;
+    font-size: 22px;
+    font-weight: 800;
+    color: var(--text);
+    line-height: 1.1;
+  }
+
+  small {
+    display: block;
+    margin-top: 6px;
+    font-size: 11px;
+    color: var(--text-3);
+  }
+}
+
+.training-timer-actions,
+.training-timer-confirm-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.training-timer-actions > .training-timer-btn:only-child,
+.training-timer-confirm-actions > .training-timer-btn:only-child {
+  grid-column: 1 / -1;
+}
+
+.training-timer-btn {
+  min-height: 48px;
+  border-radius: 14px;
+  border: 1px solid transparent;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 18px;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.18s ease, opacity 0.18s ease;
+
+  &:active {
+    transform: scale(0.98);
+  }
+
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.7;
+  }
+
+  &.is-primary {
+    background: #164a41;
+    color: #fff;
+  }
+
+  &.is-ghost {
+    background: #fff;
+    color: var(--text-2);
+    border-color: rgba(22, 74, 65, 0.12);
+  }
+
+  &.is-danger {
+    background: rgba(231, 76, 60, 0.12);
+    color: #d74736;
+  }
+}
+
+.training-timer-records {
+  margin-top: 24px;
+  border-top: 1px solid rgba(22, 74, 65, 0.08);
+  padding-top: 14px;
+}
+
+.training-timer-records-toggle {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0;
+  color: var(--text);
+  cursor: pointer;
+
+  span {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 15px;
+    font-weight: 700;
+  }
+
+  em {
+    font-style: normal;
+    color: var(--brand);
+    font-size: 12px;
+    padding: 2px 10px;
+    border-radius: 999px;
+    background: rgba(22, 74, 65, 0.08);
+  }
+
+  .anticon {
+    transition: transform 0.2s ease;
+  }
+
+  &.is-open .anticon {
+    transform: rotate(90deg);
+  }
+}
+
+.training-timer-records-body {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.training-timer-record-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-radius: 14px;
+  background: rgba(22, 74, 65, 0.03);
+  border: 1px solid rgba(22, 74, 65, 0.06);
+  padding: 12px 14px;
+
+  strong {
+    display: block;
+    font-size: 14px;
+    color: var(--text);
+  }
+
+  span {
+    display: block;
+    margin-top: 4px;
+    font-size: 12px;
+    color: var(--text-3);
+  }
+
+  b {
+    flex-shrink: 0;
+    font-size: 16px;
+    color: var(--brand);
+  }
+}
+
+.training-timer-record-empty {
+  padding: 14px 0 6px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--text-3);
+}
+
+.training-timer-confirm {
+  position: fixed;
+  inset: 0;
+  z-index: 1002;
+  background: rgba(15, 23, 20, 0.36);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.training-timer-confirm-card {
+  width: min(420px, 100%);
+  border-radius: 24px;
+  padding: 28px 24px 24px;
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 24px 60px rgba(15, 23, 20, 0.2);
+  text-align: center;
+
+  h3 {
+    margin: 12px 0 4px;
+    font-size: 20px;
+    color: var(--text);
+  }
+
+  p {
+    margin: 0;
+    color: var(--text-3);
+    font-size: 13px;
+  }
+}
+
+.training-timer-confirm-icon {
+  width: 56px;
+  height: 56px;
+  margin: 0 auto;
+  border-radius: 50%;
+  background: rgba(22, 74, 65, 0.10);
+  color: var(--brand);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+}
+
+.training-timer-confirm-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin: 20px 0;
+
+  > div {
+    border-radius: 14px;
+    background: rgba(22, 74, 65, 0.03);
+    border: 1px solid rgba(22, 74, 65, 0.06);
+    padding: 14px 10px;
+  }
+
+  strong {
+    display: block;
+    font-size: 20px;
+    color: var(--brand);
+  }
+
+  span {
+    display: block;
+    margin-top: 4px;
+    font-size: 11px;
+    color: var(--text-3);
+  }
+}
+
+.training-timer-reset {
+  margin-top: 14px;
+  border: 0;
+  background: transparent;
+  color: #d74736;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+@media (min-width: 769px) {
+  .training-timer-sheet {
+    top: 50%;
+    bottom: auto;
+    left: 50%;
+    right: auto;
+    width: 468px;
+    max-width: calc(100vw - 32px);
+    max-height: 65vh;
+    transform: translate(-50%, -50%);
+    border-radius: 24px;
+    padding: 16px 21px 19px;
+  }
+
+  .training-timer-handle {
+    display: none;
+  }
+
+  .training-timer-top {
+    margin-bottom: 16px;
+  }
+
+  .training-timer-setbar {
+    margin-bottom: 16px;
+  }
+
+  .training-timer-setlabel {
+    margin-bottom: 10px;
+  }
+
+  .training-timer-ring {
+    width: 162px;
+    margin-bottom: 14px;
+  }
+
+  .training-timer-status {
+    margin-top: 5px;
+  }
+
+  .training-timer-stats {
+    margin-bottom: 14px;
+  }
+
+  .training-timer-records {
+    margin-top: 16px;
+    padding-top: 10px;
+  }
+}
+
+@media (max-width: 520px) {
+  .training-timer-sheet {
+    padding-left: 18px;
+    padding-right: 18px;
+  }
+
+  .training-timer-handle {
+    margin-bottom: 12px;
+  }
+
+  .training-timer-confirm-stats {
+    grid-template-columns: 1fr;
+  }
+}
