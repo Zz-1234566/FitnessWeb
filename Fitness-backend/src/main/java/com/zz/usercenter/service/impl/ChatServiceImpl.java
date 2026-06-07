@@ -190,8 +190,8 @@ implements ChatService {
     private static final int QUICK_STREAM_CHUNK_SIZE = 2;
     private static final long QUICK_STREAM_DELAY_MS = 42L;
     private static final DateTimeFormatter TIME_FMT = DateTimeFormatter.ofPattern("HH:mm");
-    private static final Pattern DIET_SINGLE_MEAL_PATTERN = Pattern.compile("(\u65e9\u9910|\u5348\u9910|\u5348\u996d|\u665a\u9910|\u665a\u996d|\u52a0\u9910|\u591c\u5bb5|\u5bb5\u591c|\u7ec3\u540e\u9910)");
-    private static final List<String> PLAN_MEAL_ORDER = List.of("\u65e9\u9910", "\u7ec3\u540e\u9910", "\u5348\u9910", "\u52a0\u9910", "\u665a\u9910");
+    private static final Pattern DIET_SINGLE_MEAL_PATTERN = Pattern.compile("(早餐|午餐|午饭|晚餐|晚饭|加餐|夜宵|宵夜|练后餐)");
+    private static final List<String> PLAN_MEAL_ORDER = List.of("早餐", "练后餐", "午餐", "加餐", "晚餐");
     private static final List<String> PLAN_MUSCLE_GROUP_ORDER = List.of("chest", "back", "shoulders", "arms", "legs", "core");
     private static final BigDecimal KJ_TO_KCAL_DIVISOR = new BigDecimal("4.184");
     private static final ThreadLocal<String> ACTIVE_CHAT_MODEL = new ThreadLocal();
@@ -199,33 +199,33 @@ implements ChatService {
     private static final ThreadLocal<String> CACHED_TRAINING_PLAN_TEXT = new ThreadLocal();
     private static final ThreadLocal<List<Map<String, String>>> ACTIVE_CUSTOM_MODELS = new ThreadLocal();
     private volatile boolean clientDisconnected = false;
-    private static final Map<String, Integer> WEEKDAY_MAP = Map.of("\u4e00", 1, "\u4e8c", 2, "\u4e09", 3, "\u56db", 4, "\u4e94", 5, "\u516d", 6, "\u65e5", 7, "\u5929", 7);
+    private static final Map<String, Integer> WEEKDAY_MAP = Map.of("一", 1, "二", 2, "三", 3, "四", 4, "五", 5, "六", 6, "日", 7, "天", 7);
     private static final ObjectMapper JSON_MAPPER = new ObjectMapper();
-    private static final String INTENT_CLASSIFY_PROMPT = "\u4f60\u662f\u5065\u8eab\u52a9\u624b\u7684\u610f\u56fe\u5206\u6790\u6a21\u5757\u3002\u5206\u6790\u7528\u6237\u6d88\u606f\uff0c\u4e25\u683c\u53ea\u8fd4\u56de\u4e00\u4e2aJSON\u5bf9\u8c61\uff0c\u4e0d\u8981\u8fd4\u56de\u4efb\u4f55\u5176\u4ed6\u6587\u5b57\u3002\n\n\u53ef\u7528\u610f\u56fe\uff1a\n1. save_diet: \u7528\u6237\u5728\u9648\u8ff0\"\u5df2\u7ecf\u5403\u4e86/\u559d\u4e86\u4ec0\u4e48\"\u6216\"\u8bf7\u5e2e\u6211\u8bb0\u5f55\u996e\u98df\"\u3002\u53c2\u6570: food(\u5fc5\u586b,\u4ec5\u4fdd\u7559\u98df\u7269\u5185\u5bb9), meal(\u9910\u6b21)\n2. save_exercise: \u7528\u6237\u5728\u9648\u8ff0\"\u5df2\u7ecf\u505a\u4e86\u4ec0\u4e48\u8fd0\u52a8\"\u6216\"\u8bf7\u5e2e\u6211\u8bb0\u5f55\u8bad\u7ec3\"\u3002\u53c2\u6570: exercises(\u5fc5\u586b,\u6570\u7ec4,\u6bcf\u4e2a\u5143\u7d20\u542bname(\u52a8\u4f5c\u540d,\u5fc5\u586b),sets(\u7ec4\u6570,\u53ef\u9009),duration(\u5206\u949f\u6570,\u53ef\u9009))\n3. save_weight: \u7528\u6237\u62a5\u4f53\u91cd\u6570\u5b57\u3002\u53c2\u6570: weight_kg(\u5fc5\u586b,\u6570\u5b57,\u65a4\u9700\u6362\u7b97\u6210kg), note(\u53ef\u9009\u5907\u6ce8)\n4. query_training: \u67e5\u8bad\u7ec3\u3002\"\u7ec3\u4ec0\u4e48/\u8be5\u7ec3\u4ec0\u4e48/\u8bad\u7ec3\u5b89\u6392\"=\u8ba1\u5212\u5b89\u6392\uff0c\"\u7ec3\u4e86\u4ec0\u4e48/\u8fd0\u52a8\u8bb0\u5f55\"=\u5df2\u5b8c\u6210\u7684\u8bb0\u5f55\u3002\u53c2\u6570: query_type(\"\u5df2\u5b8c\u6210\u7684\u8bb0\u5f55\"/\"\u8ba1\u5212\u5b89\u6392\",\u5fc5\u586b), target_day(\"\u4eca\u5929\"/\"\u660e\u5929\"/\"\u5168\u90e8\",\u9ed8\u8ba4\u4eca\u5929)\n5. query_diet: \u67e5\u996e\u98df\u3002\"\u5403\u4e86\u4ec0\u4e48/\u996e\u98df\u8bb0\u5f55\"=\u5df2\u5b8c\u6210\u7684\u8bb0\u5f55\uff0c\"\u5403\u4ec0\u4e48/\u98df\u8c31\"=\u8ba1\u5212\u5b89\u6392\u3002\u53c2\u6570: query_type(\u5fc5\u586b), meal_type(\u53ef\u9009)\n6. query_weight: \u67e5\u4f53\u91cd\u3002\"\u6700\u8fd1\u4f53\u91cd/\u4f53\u91cd\u8d8b\u52bf\"\u7b49\u3002\u53c2\u6570: range(\"\u4eca\u5929\"/\"\u6700\u8fd17\u5929\"/\"\u6700\u8fd130\u5929\",\u9ed8\u8ba4\u6700\u8fd17\u5929)\n7. get_today_records: \u67e5\u4eca\u5929\u7efc\u5408\u8bb0\u5f55\u3002\u65e0\u53c2\u6570\n8. get_week_records: \u67e5\u672c\u5468\u8bb0\u5f55\u3002\u65e0\u53c2\u6570\n9. get_history_record: \u67e5\u67d0\u5929\u8bb0\u5f55\u3002\u53c2\u6570: date_description(\u5fc5\u586b)\n10. search_knowledge: \u5065\u8eab\u4e13\u4e1a\u95ee\u9898(\u8bad\u7ec3\u539f\u7406/\u8425\u517b/\u8865\u5242/\u5668\u68b0/\u4f24\u75c5/\u5eb7\u590d/\u51cf\u8102/\u589e\u808c\u7b49)\u3002\u53c2\u6570: query(\u5fc5\u586b)\n11. generate_training_plan: \u751f\u6210/\u8c03\u6574\u8bad\u7ec3\u8ba1\u5212\u3002\u53c2\u6570: user_request, adjust_existing(bool)\n12. generate_diet_plan: \u751f\u6210\u996e\u98df\u63a8\u8350/\u98df\u8c31\u3002\u53c2\u6570: user_request, meal_scope(\"\u5168\u5929\"/\"\u5355\u9910\")\n13. delete_record: \u7528\u6237\u60f3\u5220\u9664/\u64a4\u56de\u5df2\u8bb0\u5f55\u7684\u5185\u5bb9\u3002\u53c2\u6570: type(\"exercise\"/\"diet\",\u5fc5\u586b), target(\u5177\u4f53\u63cf\u8ff0\u5982\"\u6df1\u8e72\"/\"\u5348\u9910\",\u53ef\u9009,\u9ed8\u8ba4\u6700\u540e\u4e00\u6761)\n14. update_weight: \u7528\u6237\u5728\u4fee\u6b63\u4e4b\u524d\u62a5\u9519\u7684\u4f53\u91cd(\u8bed\u5883\u542b\"\u4e0d\u5bf9/\u9519\u4e86/\u6539\u6210/\u5e94\u8be5\u662f/\u4fee\u6539\")\u3002\u53c2\u6570: weight_kg(\u5fc5\u586b,\u6570\u5b57)\n15. other: \u7eaf\u95f2\u804a/\u6253\u62db\u547c/\u4e0d\u5339\u914d\u4ee5\u4e0a\u4efb\u4f55\u610f\u56fe\n16. query_weather: \u7528\u6237\u8be2\u95ee\u5929\u6c14\u60c5\u51b5\u3002\u53c2\u6570: query(\u53ef\u9009,\u5982\"\u660e\u5929\u5929\u6c14\"\"\u8fd9\u5468\u5929\u6c14\")\n17. set_daily_calories: \u7528\u6237\u60f3\u8bbe\u7f6e\u6bcf\u65e5\u6444\u5165\u70ed\u91cf\u76ee\u6807\u3002\u53c2\u6570: daily_calories(\u5fc5\u586b,\u6570\u5b57,\u5355\u4f4dkcal)\n18. set_target_weight: \u7528\u6237\u60f3\u8bbe\u7f6e\u76ee\u6807\u4f53\u91cd\u3002\u53c2\u6570: target_weight(\u5fc5\u586b,\u6570\u5b57,\u5355\u4f4dkg,\u65a4\u9700\u6362\u7b97\u6210kg)\n19. report_training_issue: \u7528\u6237\u53cd\u9988\u8bad\u7ec3\u4e2d\u7684\u8eab\u4f53\u4e0d\u9002\u6216\u56f0\u96be\u3002\u53c2\u6570: issue_description(\u5fc5\u586b,\u95ee\u9898\u63cf\u8ff0), affected_exercise(\u53ef\u9009,\u51fa\u95ee\u9898\u7684\u52a8\u4f5c)\n20. report_diet_issue: \u7528\u6237\u53cd\u9988\u996e\u98df\u4e0d\u8db3\u6216\u9965\u997f\u3002\u53c2\u6570: issue_description(\u5fc5\u586b,\u95ee\u9898\u63cf\u8ff0), meal_context(\u53ef\u9009,\u54ea\u4e00\u9910/\u4ec0\u4e48\u65f6\u5019)\n21. update_location: \u7528\u6237\u544a\u77e5\u81ea\u5df1\u6240\u5728\u7684\u57ce\u5e02/\u4f4d\u7f6e\u3002\u53c2\u6570: city(\u5fc5\u586b,\u57ce\u5e02\u540d,\u5982\"\u5e7f\u5dde\"\"\u6df1\u5733\"\"\u4e0a\u6d77\")\n\n\u5224\u65ad\u89c4\u5219\uff1a\n- \"\u6211\u5403\u4e86XX\"/\"\u8bb0\u5f55\u4e00\u4e0b\u5403\u4e86XX\" \u2192 save_diet\uff08\u63d0\u53d6\u98df\u7269\uff0c\u4e0d\u8981\u5e26\"\u6211\u5403\u4e86/\u5e2e\u6211\u8bb0\u5f55\"\u524d\u7f00\uff09\n- \"\u6211\u7ec3\u4e86XX\"/\"\u8bb0\u5f55\u4e00\u4e0b\u7ec3\u4e86XX\" \u2192 save_exercise\uff08\u62c6\u5206\u4e3aexercises\u6570\u7ec4\uff0c\u6bcf\u4e2a\u52a8\u4f5c\u4e00\u4e2a\u5143\u7d20\uff0c\u63d0\u53d6\u7ec4\u6570\u548c\u65f6\u957f\uff09\n- \"\u4f53\u91cd70kg\"/\"\u79f0\u4e86\u4e00\u4e0b65.5\"/\"\u4eca\u5929\u4f53\u91cd140\u65a4\" \u2192 save_weight\uff08\u65a4\u8981\u9664\u4ee52\u8f6ckg\uff09\n- \"\u4e0d\u5bf9\uff0c\u4f53\u91cd\u662f72\"/\"\u4f53\u91cd\u6539\u621072\"/\"\u5e94\u8be5\u662f73kg\u4e0d\u662f74\" \u2192 update_weight\uff08\u4fee\u6b63\u4f53\u91cd\uff0c\u65a4\u8981\u9664\u4ee52\u8f6ckg\uff09\n- \"\u628aXX\u5220\u4e86\"/\"\u64a4\u56deXX\"/\"\u5220\u9664\u8bb0\u5f55\"/\"\u6ca1\u5403\u90a3\u4e2a\" \u2192 delete_record\n- \"\u4eca\u5929\u7ec3\u4ec0\u4e48\"/\"\u8be5\u7ec3\u4ec0\u4e48\"/\"\u8bad\u7ec3\u5b89\u6392\" \u2192 query_training(query_type=\u8ba1\u5212\u5b89\u6392)\n- \"\u4eca\u5929\u7ec3\u4e86\u4ec0\u4e48\"/\"\u8fd0\u52a8\u8bb0\u5f55\" \u2192 query_training(query_type=\u5df2\u5b8c\u6210\u7684\u8bb0\u5f55)\n- \"\u4eca\u5929\u5403\u4ec0\u4e48\"/\"\u98df\u8c31\u63a8\u8350\" \u2192 query_diet(query_type=\u8ba1\u5212\u5b89\u6392)\n- \"\u4eca\u5929\u5403\u4e86\u4ec0\u4e48\"/\"\u996e\u98df\u8bb0\u5f55\" \u2192 query_diet(query_type=\u5df2\u5b8c\u6210\u7684\u8bb0\u5f55)\n- \"\u6700\u8fd1\u4f53\u91cd\"/\"\u4f53\u91cd\u8d8b\u52bf\"/\"\u7626\u4e86\u591a\u5c11\" \u2192 query_weight\n- \"\u4eca\u5929\u505a\u4e86\u4ec0\u4e48\"/\"\u6253\u5361\u603b\u7ed3\" \u2192 get_today_records\n- \"\u8fd9\u5468\u505a\u4e86\u4ec0\u4e48\"/\"\u672c\u5468\u603b\u7ed3\" \u2192 get_week_records\n- \"\u6628\u5929\u7ec3\u4e86\u4ec0\u4e48\"/\"\u4e0a\u5468\u4e09\u7684\u8bb0\u5f55\" \u2192 get_history_record\n- \"\u5e2e\u6211\u5236\u5b9a\u8bad\u7ec3\u8ba1\u5212\" \u2192 generate_training_plan\n- \"\u63a8\u8350\u4eca\u5929\u7684\u98df\u8c31\" \u2192 generate_diet_plan\n- \"\u7b4b\u819c\u67aa\u6709\u7528\u5417\"/\"\u86cb\u767d\u7c89\u600e\u4e48\u559d\"/\"\u6df1\u8e72\u819d\u76d6\u75db\" \u2192 search_knowledge\n- \"\u4eca\u5929\u5929\u6c14\"/\"\u660e\u5929\u4e0b\u4e0d\u4e0b\u96e8\"/\"\u8fd9\u5468\u5929\u6c14\u600e\u4e48\u6837\"/\"\u5916\u9762\u51b7\u4e0d\u51b7\" \u2192 query_weather\n- \"\u6bcf\u5929\u54032000\u5343\u5361\"/\"\u76ee\u6807\u70ed\u91cf1800\"/\"\u6bcf\u65e5\u6444\u5165\u8bbe\u4e3a2200kcal\"/\"\u6211\u60f3\u6bcf\u5929\u54031500\u5927\u5361\" \u2192 set_daily_calories\n- \"\u76ee\u6807\u4f53\u91cd65kg\"/\"\u60f3\u51cf\u5230140\u65a4\"/\"\u6211\u8981\u7ec3\u523070\u516c\u65a4\" \u2192 set_target_weight\n- \"\u6211\u5728\u5e7f\u5dde\"/\"\u6211\u5728\u6df1\u5733\"/\"\u5750\u6807\u4e0a\u6d77\"/\"\u6211\u5728\u6b66\u6c49\" \u2192 update_location\n- \"\u4f60\u597d\"/\"\u8c22\u8c22\"/\u95f2\u804a \u2192 other\n\n\u53c2\u6570\u89c4\u5219\uff1a\n- \u4e0d\u8981\u7f16\u9020\u514b\u91cd\u3001\u70ed\u91cf\u3001\u7ec4\u6570\u3001\u65f6\u957f\uff1b\u53ea\u62bd\u53d6\u7528\u6237\u660e\u786e\u8bf4\u8fc7\u7684\u5185\u5bb9\n- weight_kg \u7edf\u4e00\u4e3akg\u5355\u4f4d\uff08\u7528\u6237\u8bf4\u65a4\u8981\u9664\u4ee52\uff09\n- exercises\u6570\u7ec4\u4e2d\u5982\u679c\u7528\u6237\u53ea\u63d0\u4e86\u4e00\u4e2a\u52a8\u4f5c\u4e5f\u8981\u7528\u6570\u7ec4\u683c\u5f0f\n- \u4e0d\u8981\u8f93\u51fa\u989d\u5916\u6587\u5b57\uff0c\u53ea\u8fd4\u56deJSON\n\n\u793a\u4f8b\uff1a\n\"\u6211\u665a\u4e0a\u5403\u4e86\u4e24\u4e2a\u5168\u9ea6\u9762\u5305\u548c\u4e09\u4e2a\u9e21\u86cb\" \u2192 {\"intent\":\"save_diet\",\"food\":\"\u4e24\u4e2a\u5168\u9ea6\u9762\u5305\u548c\u4e09\u4e2a\u9e21\u86cb\",\"meal\":\"\u665a\u9910\"}\n\"\u5e2e\u6211\u8bb0\u5f55\u4e00\u4e0b\u6211\u7ec3\u4e86\u6df1\u8e725\u7ec4\" \u2192 {\"intent\":\"save_exercise\",\"exercises\":[{\"name\":\"\u6df1\u8e72\",\"sets\":5}]}\n\"\u6211\u7ec3\u4e86\u6df1\u8e724\u7ec415\u5206\u949f\u8fd8\u6709\u5367\u63a83\u7ec410\u5206\u949f\" \u2192 {\"intent\":\"save_exercise\",\"exercises\":[{\"name\":\"\u6df1\u8e72\",\"sets\":4,\"duration\":15},{\"name\":\"\u5367\u63a8\",\"sets\":3,\"duration\":10}]}\n\"\u8dd1\u6b6530\u5206\u949f\" \u2192 {\"intent\":\"save_exercise\",\"exercises\":[{\"name\":\"\u8dd1\u6b65\",\"duration\":30}]}\n\"\u4eca\u5929\u4f53\u91cd70.5kg\" \u2192 {\"intent\":\"save_weight\",\"weight_kg\":70.5}\n\"\u79f0\u4e86\u4e00\u4e0b140\u65a4\" \u2192 {\"intent\":\"save_weight\",\"weight_kg\":70.0}\n\"\u4e0d\u5bf9\uff0c\u6211\u4f53\u91cd\u662f72\" \u2192 {\"intent\":\"update_weight\",\"weight_kg\":72.0}\n\"\u4f53\u91cd\u6539\u621072kg\" \u2192 {\"intent\":\"update_weight\",\"weight_kg\":72.0}\n\"\u628a\u521a\u624d\u7684\u6df1\u8e72\u5220\u4e86\" \u2192 {\"intent\":\"delete_record\",\"type\":\"exercise\",\"target\":\"\u6df1\u8e72\"}\n\"\u64a4\u56de\u5348\u9910\" \u2192 {\"intent\":\"delete_record\",\"type\":\"diet\",\"target\":\"\u5348\u9910\"}\n\"\u5220\u9664\u6700\u540e\u4e00\u6761\u8bad\u7ec3\u8bb0\u5f55\" \u2192 {\"intent\":\"delete_record\",\"type\":\"exercise\"}\n\"\u4eca\u5929\u8be5\u7ec3\u4ec0\u4e48\" \u2192 {\"intent\":\"query_training\",\"query_type\":\"\u8ba1\u5212\u5b89\u6392\",\"target_day\":\"\u4eca\u5929\",\"complete\":true}\n\"\u6700\u8fd1\u4f53\u91cd\u53d8\u5316\u5927\u5417\" \u2192 {\"intent\":\"query_weight\",\"range\":\"\u6700\u8fd17\u5929\",\"complete\":true}\n\"\u6df1\u8e72\u819d\u76d6\u75db\u600e\u4e48\u529e\" \u2192 {\"intent\":\"search_knowledge\",\"query\":\"\u6df1\u8e72\u819d\u76d6\u75db\u600e\u4e48\u529e\",\"complete\":true}\n\"\u4eca\u5929\u5929\u6c14\u600e\u4e48\u6837\" \u2192 {\"intent\":\"query_weather\",\"complete\":true}\n\"\u660e\u5929\u4e0b\u96e8\u5417\" \u2192 {\"intent\":\"query_weather\",\"query\":\"\u660e\u5929\u5929\u6c14\",\"complete\":true}\n\"\u6bcf\u5929\u54032000\u5343\u5361\" \u2192 {\"intent\":\"set_daily_calories\",\"daily_calories\":2000,\"complete\":true}\n\"\u76ee\u6807\u70ed\u91cf\u8bbe\u4e3a1800\" \u2192 {\"intent\":\"set_daily_calories\",\"daily_calories\":1800,\"complete\":true}\n\"\u6bcf\u65e5\u6444\u51651500\u5927\u5361\" \u2192 {\"intent\":\"set_daily_calories\",\"daily_calories\":1500,\"complete\":true}\n\"\u76ee\u6807\u4f53\u91cd65kg\" \u2192 {\"intent\":\"set_target_weight\",\"target_weight\":65.0,\"complete\":true}\n\"\u60f3\u51cf\u5230140\u65a4\" \u2192 {\"intent\":\"set_target_weight\",\"target_weight\":70.0,\"complete\":true}\n\"\u4f60\u597d\" \u2192 {\"intent\":\"other\",\"complete\":true}\n\"\u5e2e\u6211\u5236\u5b9a\u8ba1\u5212\" \u2192 {\"intent\":\"generate_training_plan\",\"user_request\":\"\u5e2e\u6211\u5236\u5b9a\u8ba1\u5212\",\"complete\":false,\"clarify\":\"\u597d\u7684\uff0c\u5e2e\u4f60\u5236\u5b9a\u8bad\u7ec3\u8ba1\u5212\uff01\u9700\u8981\u786e\u8ba4\uff1a\u5065\u8eab\u76ee\u6807\u662f\u4ec0\u4e48\uff1f\u6bcf\u5468\u80fd\u7ec3\u51e0\u5929\uff1f\"}\n\"\u5e2e\u6211\u5236\u5b9a\u51cf\u8102\u8ba1\u5212\u6bcf\u54684\u5929\" \u2192 {\"intent\":\"generate_training_plan\",\"user_request\":\"\u5236\u5b9a\u51cf\u8102\u8ba1\u5212\u6bcf\u54684\u5929\",\"complete\":true}\n\"\u6211\u665a\u4e0a\u5403\u4e86\u4e24\u4e2a\u5168\u9ea6\u9762\u5305\u548c\u4e09\u4e2a\u9e21\u86cb\" \u2192 {\"intent\":\"save_diet\",\"food\":\"\u4e24\u4e2a\u5168\u9ea6\u9762\u5305\u548c\u4e09\u4e2a\u9e21\u86cb\",\"meal\":\"\u665a\u9910\",\"complete\":true}\n\"\u8dd1\u6b6530\u5206\u949f\" \u2192 {\"intent\":\"save_exercise\",\"exercises\":[{\"name\":\"\u8dd1\u6b65\",\"duration\":30}],\"complete\":true}\n\"\u6211\u5403\u4e86\" \u2192 {\"intent\":\"save_diet\",\"complete\":false,\"clarify\":\"\u5403\u4e86\u4ec0\u4e48\u98df\u7269\u5462\uff1f\"}\n\"\u6211\u7ec3\u4e86\" \u2192 {\"intent\":\"save_exercise\",\"complete\":false,\"clarify\":\"\u505a\u4e86\u4ec0\u4e48\u8fd0\u52a8\u5462\uff1f\"}\n\"\u6df1\u8e72\u819d\u76d6\u75db\u505a\u4e0d\u4e86\" \u2192 {\"intent\":\"report_training_issue\",\"issue_description\":\"\u6df1\u8e72\u65f6\u819d\u76d6\u75db\uff0c\u65e0\u6cd5\u5b8c\u6210\",\"affected_exercise\":\"\u6df1\u8e72\",\"complete\":true}\n\"\u5367\u63a8\u592a\u91cd\u4e86\u80a9\u8180\u625b\u4e0d\u4f4f\" \u2192 {\"intent\":\"report_training_issue\",\"issue_description\":\"\u5367\u63a8\u91cd\u91cf\u592a\u5927\uff0c\u80a9\u8180\u4e0d\u8212\u670d\",\"affected_exercise\":\"\u5367\u63a8\",\"complete\":true}\n\"\u5403\u4e0d\u9971\u8001\u662f\u997f\" \u2192 {\"intent\":\"report_diet_issue\",\"issue_description\":\"\u603b\u662f\u5403\u4e0d\u9971\uff0c\u611f\u89c9\u997f\",\"complete\":true}\n\"\u70ed\u91cf\u4e0d\u591f\u5934\u6655\" \u2192 {\"intent\":\"report_diet_issue\",\"issue_description\":\"\u6444\u5165\u70ed\u91cf\u4e0d\u8db3\uff0c\u51fa\u73b0\u5934\u6655\",\"complete\":true}\n\n\u8865\u5145\u8f93\u51fa\u5b57\u6bb5\uff1a\n- complete(bool): \u5fc5\u586b\u53c2\u6570\u662f\u5426\u9f50\u5168\u3002\n  save_weight/update_weight/query_*/delete_*/get_today_records/get_week_records/get_history_record/search_knowledge/set_daily_calories/set_target_weight \u65f6\u4e00\u5f8b\u4e3atrue\u3002\n  save_diet \u6709food\u65f6\u4e3atrue\uff0cfood\u4e3a\u7a7a\u6216\u7f3a\u5931\u65f6\u4e3afalse\uff0c\u8ffd\u95ee\"\u5403\u4e86\u4ec0\u4e48\uff1f\"\u3002\n  save_exercise \u6709exercises\u65f6\u4e3atrue\uff0cexercises\u4e3a\u7a7a\u6216\u7f3a\u5931\u65f6\u4e3afalse\uff0c\u8ffd\u95ee\"\u505a\u4e86\u4ec0\u4e48\u8fd0\u52a8\uff1f\"\u3002\n  generate_* \u6709user_request\u65f6\u4e3atrue\uff0c\u7f3auser_request\u65f6\u4e3afalse\u3002\n  report_training_issue/report_diet_issue \u6709issue_description\u65f6\u4e3atrue\u3002\n  other \u65f6\u4e3atrue\u3002\n- clarify(string): \u4ec5complete=false\u65f6\u586b\u5199\uff0c\u5411\u7528\u6237\u8ffd\u95ee\u7f3a\u5931\u7684\u4fe1\u606f\uff0c\u7b80\u6d01\u4e00\u53e5\u8bdd\uff0c\u4e0d\u8d85\u8fc750\u5b57\u3002complete=true\u65f6\u4e3anull\u3002\n";
-    private static final String AUDIT_CHECK_PROMPT = "\u4f60\u662f\u4fe1\u606f\u5ba1\u8ba1\u6a21\u5757\u3002\u5bf9\u6bd4\u3010\u7528\u6237\u6d88\u606f\u3011\u548c\u3010\u5df2\u63d0\u53d6\u53c2\u6570\u3011\uff0c\u68c0\u67e5\u7528\u6237\u6d88\u606f\u4e2d\u662f\u5426\u8fd8\u6709\u88ab\u9057\u6f0f\u7684\u76f8\u5173\u4fe1\u606f\u3002\n\n\u3010\u7528\u6237\u6d88\u606f\u3011\n%s\n\n\u3010\u5df2\u63d0\u53d6\u53c2\u6570\u3011\n%s\n\n\u3010\u5f53\u524d\u610f\u56fe\u3011%s\n\u53ef\u63d0\u53d6\u53c2\u6570\u5217\u8868\uff1a%s\n\n\u53ea\u5173\u6ce8\u660e\u786e\u51fa\u73b0\u5728\u7528\u6237\u6d88\u606f\u4e2d\u7684\u4fe1\u606f\uff0c\u4e0d\u8981\u63a8\u65ad\u3002\n\u5982\u679c\u6709\u9057\u6f0f\uff0c\u8fd4\u56de {\"missed\":{\"field\":\"\u503c\"}}\n\u6ca1\u6709\u9057\u6f0f\u8fd4\u56de {\"missed\":null}\n\u53ea\u8fd4\u56deJSON\uff0c\u4e0d\u8981\u5176\u4ed6\u6587\u5b57\u3002\n";
-    private static final Map<String, String> CITY_EN_MAP = Map.ofEntries(Map.entry("\u5317\u4eac", "Beijing"), Map.entry("\u4e0a\u6d77", "Shanghai"), Map.entry("\u5e7f\u5dde", "Guangzhou"), Map.entry("\u6df1\u5733", "Shenzhen"), Map.entry("\u6210\u90fd", "Chengdu"), Map.entry("\u676d\u5dde", "Hangzhou"), Map.entry("\u6b66\u6c49", "Wuhan"), Map.entry("\u5357\u4eac", "Nanjing"), Map.entry("\u91cd\u5e86", "Chongqing"), Map.entry("\u5929\u6d25", "Tianjin"), Map.entry("\u897f\u5b89", "Xi'an"), Map.entry("\u82cf\u5dde", "Suzhou"), Map.entry("\u957f\u6c99", "Changsha"), Map.entry("\u90d1\u5dde", "Zhengzhou"), Map.entry("\u4e1c\u839e", "Dongguan"), Map.entry("\u9752\u5c9b", "Qingdao"), Map.entry("\u6c88\u9633", "Shenyang"), Map.entry("\u5b81\u6ce2", "Ningbo"), Map.entry("\u6606\u660e", "Kunming"), Map.entry("\u5927\u8fde", "Dalian"), Map.entry("\u53a6\u95e8", "Xiamen"), Map.entry("\u798f\u5dde", "Fuzhou"), Map.entry("\u65e0\u9521", "Wuxi"), Map.entry("\u5408\u80a5", "Hefei"), Map.entry("\u54c8\u5c14\u6ee8", "Harbin"), Map.entry("\u6d4e\u5357", "Jinan"), Map.entry("\u4f5b\u5c71", "Foshan"), Map.entry("\u957f\u6625", "Changchun"), Map.entry("\u6e29\u5dde", "Wenzhou"), Map.entry("\u77f3\u5bb6\u5e84", "Shijiazhuang"), Map.entry("\u5357\u5b81", "Nanning"), Map.entry("\u8d35\u9633", "Guiyang"), Map.entry("\u5357\u660c", "Nanchang"), Map.entry("\u6d77\u53e3", "Haikou"), Map.entry("\u5170\u5dde", "Lanzhou"), Map.entry("\u592a\u539f", "Taiyuan"), Map.entry("\u94f6\u5ddd", "Yinchuan"), Map.entry("\u897f\u5b81", "Xining"), Map.entry("\u547c\u548c\u6d69\u7279", "Hohhot"), Map.entry("\u62c9\u8428", "Lhasa"), Map.entry("\u4e4c\u9c81\u6728\u9f50", "Urumqi"), Map.entry("\u73e0\u6d77", "Zhuhai"), Map.entry("\u4e2d\u5c71", "Zhongshan"), Map.entry("\u60e0\u5dde", "Huizhou"), Map.entry("\u6c5f\u95e8", "Jiangmen"), Map.entry("\u6c55\u5934", "Shantou"), Map.entry("\u5f90\u5dde", "Xuzhou"), Map.entry("\u5e38\u5dde", "Changzhou"), Map.entry("\u70df\u53f0", "Yantai"), Map.entry("\u6f33\u5dde", "Zhangzhou"), Map.entry("\u4fdd\u5b9a", "Baoding"), Map.entry("\u90af\u90f8", "Handan"), Map.entry("\u6d1b\u9633", "Luoyang"), Map.entry("\u5609\u5174", "Jiaxing"), Map.entry("\u7ecd\u5174", "Shaoxing"), Map.entry("\u53f0\u5dde", "Taizhou"), Map.entry("\u91d1\u534e", "Jinhua"), Map.entry("\u6f4d\u574a", "Weifang"), Map.entry("\u6dc4\u535a", "Zibo"), Map.entry("\u4e34\u6c82", "Linyi"), Map.entry("\u5a01\u6d77", "Weihai"), Map.entry("\u6d4e\u5b81", "Jining"), Map.entry("\u5fb7\u5dde", "Dezhou"), Map.entry("\u8944\u9633", "Xiangyang"), Map.entry("\u5b9c\u660c", "Yichang"), Map.entry("\u5cb3\u9633", "Yueyang"), Map.entry("\u682a\u6d32", "Zhuzhou"), Map.entry("\u8861\u9633", "Hengyang"), Map.entry("\u67f3\u5dde", "Liuzhou"), Map.entry("\u6842\u6797", "Guilin"), Map.entry("\u7ef5\u9633", "Mianyang"), Map.entry("\u5b9c\u5bbe", "Yibin"), Map.entry("\u5927\u7406", "Dali"), Map.entry("\u4e3d\u6c5f", "Lijiang"), Map.entry("\u4e09\u4e9a", "Sanya"), Map.entry("\u9999\u6e2f", "Hong Kong"), Map.entry("\u6fb3\u95e8", "Macau"), Map.entry("\u53f0\u5317", "Taipei"));
+    private static final String INTENT_CLASSIFY_PROMPT = "你是健身助手的意图分析模块。分析用户消息，严格只返回一个JSON对象，不要返回任何其他文字。\n\n可用意图：\n1. save_diet: 用户在陈述\"已经吃了/喝了什么\"或\"请帮我记录饮食\"。参数: food(必填,仅保留食物内容), meal(餐次)\n2. save_exercise: 用户在陈述\"已经做了什么运动\"或\"请帮我记录训练\"。参数: exercises(必填,数组,每个元素含name(动作名,必填),sets(组数,可选),duration(分钟数,可选))\n3. save_weight: 用户报体重数字。参数: weight_kg(必填,数字,斤需换算成kg), note(可选备注)\n4. query_training: 查训练。\"练什么/该练什么/训练安排\"=计划安排，\"练了什么/运动记录\"=已完成的记录。参数: query_type(\"已完成的记录\"/\"计划安排\",必填), target_day(\"今天\"/\"明天\"/\"全部\",默认今天)\n5. query_diet: 查饮食。\"吃了什么/饮食记录\"=已完成的记录，\"吃什么/食谱\"=计划安排。参数: query_type(必填), meal_type(可选)\n6. query_weight: 查体重。\"最近体重/体重趋势\"等。参数: range(\"今天\"/\"最近7天\"/\"最近30天\",默认最近7天)\n7. get_today_records: 查今天综合记录。无参数\n8. get_week_records: 查本周记录。无参数\n9. get_history_record: 查某天记录。参数: date_description(必填)\n10. search_knowledge: 健身专业问题(训练原理/营养/补剂/器械/伤病/康复/减脂/增肌等)。参数: query(必填)\n11. generate_training_plan: 生成/调整训练计划。参数: user_request, adjust_existing(bool)\n12. generate_diet_plan: 生成饮食推荐/食谱。参数: user_request, meal_scope(\"全天\"/\"单餐\")\n13. delete_record: 用户想删除/撤回已记录的内容。参数: type(\"exercise\"/\"diet\",必填), target(具体描述如\"深蹲\"/\"午餐\",可选,默认最后一条)\n14. update_weight: 用户在修正之前报错的体重(语境含\"不对/错了/改成/应该是/修改\")。参数: weight_kg(必填,数字)\n15. other: 纯闲聊/打招呼/不匹配以上任何意图\n16. query_weather: 用户询问天气情况。参数: query(可选,如\"明天天气\"\"这周天气\")\n17. set_daily_calories: 用户想设置每日摄入热量目标。参数: daily_calories(必填,数字,单位kcal)\n18. set_target_weight: 用户想设置目标体重。参数: target_weight(必填,数字,单位kg,斤需换算成kg)\n19. report_training_issue: 用户反馈训练中的身体不适或困难。参数: issue_description(必填,问题描述), affected_exercise(可选,出问题的动作)\n20. report_diet_issue: 用户反馈饮食不足或饥饿。参数: issue_description(必填,问题描述), meal_context(可选,哪一餐/什么时候)\n21. update_location: 用户告知自己所在的城市/位置。参数: city(必填,城市名,如\"广州\"\"深圳\"\"上海\")\n\n判断规则：\n- \"我吃了XX\"/\"记录一下吃了XX\" → save_diet（提取食物，不要带\"我吃了/帮我记录\"前缀）\n- \"我练了XX\"/\"记录一下练了XX\" → save_exercise（拆分为exercises数组，每个动作一个元素，提取组数和时长）\n- \"体重70kg\"/\"称了一下65.5\"/\"今天体重140斤\" → save_weight（斤要除以2转kg）\n- \"不对，体重是72\"/\"体重改成72\"/\"应该是73kg不是74\" → update_weight（修正体重，斤要除以2转kg）\n- \"把XX删了\"/\"撤回XX\"/\"删除记录\"/\"没吃那个\" → delete_record\n- \"今天练什么\"/\"该练什么\"/\"训练安排\" → query_training(query_type=计划安排)\n- \"今天练了什么\"/\"运动记录\" → query_training(query_type=已完成的记录)\n- \"今天吃什么\"/\"食谱推荐\" → query_diet(query_type=计划安排)\n- \"今天吃了什么\"/\"饮食记录\" → query_diet(query_type=已完成的记录)\n- \"最近体重\"/\"体重趋势\"/\"瘦了多少\" → query_weight\n- \"今天做了什么\"/\"打卡总结\" → get_today_records\n- \"这周做了什么\"/\"本周总结\" → get_week_records\n- \"昨天练了什么\"/\"上周三的记录\" → get_history_record\n- \"帮我制定训练计划\" → generate_training_plan\n- \"推荐今天的食谱\" → generate_diet_plan\n- \"筋膜枪有用吗\"/\"蛋白粉怎么喝\"/\"深蹲膝盖痛\" → search_knowledge\n- \"今天天气\"/\"明天下不下雨\"/\"这周天气怎么样\"/\"外面冷不冷\" → query_weather\n- \"每天吃2000千卡\"/\"目标热量1800\"/\"每日摄入设为2200kcal\"/\"我想每天吃1500大卡\" → set_daily_calories\n- \"目标体重65kg\"/\"想减到140斤\"/\"我要练到70公斤\" → set_target_weight\n- \"我在广州\"/\"我在深圳\"/\"坐标上海\"/\"我在武汉\" → update_location\n- \"你好\"/\"谢谢\"/闲聊 → other\n\n参数规则：\n- 不要编造克重、热量、组数、时长；只抽取用户明确说过的内容\n- weight_kg 统一为kg单位（用户说斤要除以2）\n- exercises数组中如果用户只提了一个动作也要用数组格式\n- 不要输出额外文字，只返回JSON\n\n示例：\n\"我晚上吃了两个全麦面包和三个鸡蛋\" → {\"intent\":\"save_diet\",\"food\":\"两个全麦面包和三个鸡蛋\",\"meal\":\"晚餐\"}\n\"帮我记录一下我练了深蹲5组\" → {\"intent\":\"save_exercise\",\"exercises\":[{\"name\":\"深蹲\",\"sets\":5}]}\n\"我练了深蹲4组15分钟还有卧推3组10分钟\" → {\"intent\":\"save_exercise\",\"exercises\":[{\"name\":\"深蹲\",\"sets\":4,\"duration\":15},{\"name\":\"卧推\",\"sets\":3,\"duration\":10}]}\n\"跑步30分钟\" → {\"intent\":\"save_exercise\",\"exercises\":[{\"name\":\"跑步\",\"duration\":30}]}\n\"今天体重70.5kg\" → {\"intent\":\"save_weight\",\"weight_kg\":70.5}\n\"称了一下140斤\" → {\"intent\":\"save_weight\",\"weight_kg\":70.0}\n\"不对，我体重是72\" → {\"intent\":\"update_weight\",\"weight_kg\":72.0}\n\"体重改成72kg\" → {\"intent\":\"update_weight\",\"weight_kg\":72.0}\n\"把刚才的深蹲删了\" → {\"intent\":\"delete_record\",\"type\":\"exercise\",\"target\":\"深蹲\"}\n\"撤回午餐\" → {\"intent\":\"delete_record\",\"type\":\"diet\",\"target\":\"午餐\"}\n\"删除最后一条训练记录\" → {\"intent\":\"delete_record\",\"type\":\"exercise\"}\n\"今天该练什么\" → {\"intent\":\"query_training\",\"query_type\":\"计划安排\",\"target_day\":\"今天\",\"complete\":true}\n\"最近体重变化大吗\" → {\"intent\":\"query_weight\",\"range\":\"最近7天\",\"complete\":true}\n\"深蹲膝盖痛怎么办\" → {\"intent\":\"search_knowledge\",\"query\":\"深蹲膝盖痛怎么办\",\"complete\":true}\n\"今天天气怎么样\" → {\"intent\":\"query_weather\",\"complete\":true}\n\"明天下雨吗\" → {\"intent\":\"query_weather\",\"query\":\"明天天气\",\"complete\":true}\n\"每天吃2000千卡\" → {\"intent\":\"set_daily_calories\",\"daily_calories\":2000,\"complete\":true}\n\"目标热量设为1800\" → {\"intent\":\"set_daily_calories\",\"daily_calories\":1800,\"complete\":true}\n\"每日摄入1500大卡\" → {\"intent\":\"set_daily_calories\",\"daily_calories\":1500,\"complete\":true}\n\"目标体重65kg\" → {\"intent\":\"set_target_weight\",\"target_weight\":65.0,\"complete\":true}\n\"想减到140斤\" → {\"intent\":\"set_target_weight\",\"target_weight\":70.0,\"complete\":true}\n\"你好\" → {\"intent\":\"other\",\"complete\":true}\n\"帮我制定计划\" → {\"intent\":\"generate_training_plan\",\"user_request\":\"帮我制定计划\",\"complete\":false,\"clarify\":\"好的，帮你制定训练计划！需要确认：健身目标是什么？每周能练几天？\"}\n\"帮我制定减脂计划每周4天\" → {\"intent\":\"generate_training_plan\",\"user_request\":\"制定减脂计划每周4天\",\"complete\":true}\n\"我晚上吃了两个全麦面包和三个鸡蛋\" → {\"intent\":\"save_diet\",\"food\":\"两个全麦面包和三个鸡蛋\",\"meal\":\"晚餐\",\"complete\":true}\n\"跑步30分钟\" → {\"intent\":\"save_exercise\",\"exercises\":[{\"name\":\"跑步\",\"duration\":30}],\"complete\":true}\n\"我吃了\" → {\"intent\":\"save_diet\",\"complete\":false,\"clarify\":\"吃了什么食物呢？\"}\n\"我练了\" → {\"intent\":\"save_exercise\",\"complete\":false,\"clarify\":\"做了什么运动呢？\"}\n\"深蹲膝盖痛做不了\" → {\"intent\":\"report_training_issue\",\"issue_description\":\"深蹲时膝盖痛，无法完成\",\"affected_exercise\":\"深蹲\",\"complete\":true}\n\"卧推太重了肩膀扛不住\" → {\"intent\":\"report_training_issue\",\"issue_description\":\"卧推重量太大，肩膀不舒服\",\"affected_exercise\":\"卧推\",\"complete\":true}\n\"吃不饱老是饿\" → {\"intent\":\"report_diet_issue\",\"issue_description\":\"总是吃不饱，感觉饿\",\"complete\":true}\n\"热量不够头晕\" → {\"intent\":\"report_diet_issue\",\"issue_description\":\"摄入热量不足，出现头晕\",\"complete\":true}\n\n补充输出字段：\n- complete(bool): 必填参数是否齐全。\n  save_weight/update_weight/query_*/delete_*/get_today_records/get_week_records/get_history_record/search_knowledge/set_daily_calories/set_target_weight 时一律为true。\n  save_diet 有food时为true，food为空或缺失时为false，追问\"吃了什么？\"。\n  save_exercise 有exercises时为true，exercises为空或缺失时为false，追问\"做了什么运动？\"。\n  generate_* 有user_request时为true，缺user_request时为false。\n  report_training_issue/report_diet_issue 有issue_description时为true。\n  other 时为true。\n- clarify(string): 仅complete=false时填写，向用户追问缺失的信息，简洁一句话，不超过50字。complete=true时为null。\n";
+    private static final String AUDIT_CHECK_PROMPT = "你是信息审计模块。对比【用户消息】和【已提取参数】，检查用户消息中是否还有被遗漏的相关信息。\n\n【用户消息】\n%s\n\n【已提取参数】\n%s\n\n【当前意图】%s\n可提取参数列表：%s\n\n只关注明确出现在用户消息中的信息，不要推断。\n如果有遗漏，返回 {\"missed\":{\"field\":\"值\"}}\n没有遗漏返回 {\"missed\":null}\n只返回JSON，不要其他文字。\n";
+    private static final Map<String, String> CITY_EN_MAP = Map.ofEntries(Map.entry("北京", "Beijing"), Map.entry("上海", "Shanghai"), Map.entry("广州", "Guangzhou"), Map.entry("深圳", "Shenzhen"), Map.entry("成都", "Chengdu"), Map.entry("杭州", "Hangzhou"), Map.entry("武汉", "Wuhan"), Map.entry("南京", "Nanjing"), Map.entry("重庆", "Chongqing"), Map.entry("天津", "Tianjin"), Map.entry("西安", "Xi'an"), Map.entry("苏州", "Suzhou"), Map.entry("长沙", "Changsha"), Map.entry("郑州", "Zhengzhou"), Map.entry("东莞", "Dongguan"), Map.entry("青岛", "Qingdao"), Map.entry("沈阳", "Shenyang"), Map.entry("宁波", "Ningbo"), Map.entry("昆明", "Kunming"), Map.entry("大连", "Dalian"), Map.entry("厦门", "Xiamen"), Map.entry("福州", "Fuzhou"), Map.entry("无锡", "Wuxi"), Map.entry("合肥", "Hefei"), Map.entry("哈尔滨", "Harbin"), Map.entry("济南", "Jinan"), Map.entry("佛山", "Foshan"), Map.entry("长春", "Changchun"), Map.entry("温州", "Wenzhou"), Map.entry("石家庄", "Shijiazhuang"), Map.entry("南宁", "Nanning"), Map.entry("贵阳", "Guiyang"), Map.entry("南昌", "Nanchang"), Map.entry("海口", "Haikou"), Map.entry("兰州", "Lanzhou"), Map.entry("太原", "Taiyuan"), Map.entry("银川", "Yinchuan"), Map.entry("西宁", "Xining"), Map.entry("呼和浩特", "Hohhot"), Map.entry("拉萨", "Lhasa"), Map.entry("乌鲁木齐", "Urumqi"), Map.entry("珠海", "Zhuhai"), Map.entry("中山", "Zhongshan"), Map.entry("惠州", "Huizhou"), Map.entry("江门", "Jiangmen"), Map.entry("汕头", "Shantou"), Map.entry("徐州", "Xuzhou"), Map.entry("常州", "Changzhou"), Map.entry("烟台", "Yantai"), Map.entry("漳州", "Zhangzhou"), Map.entry("保定", "Baoding"), Map.entry("邯郸", "Handan"), Map.entry("洛阳", "Luoyang"), Map.entry("嘉兴", "Jiaxing"), Map.entry("绍兴", "Shaoxing"), Map.entry("台州", "Taizhou"), Map.entry("金华", "Jinhua"), Map.entry("潍坊", "Weifang"), Map.entry("淄博", "Zibo"), Map.entry("临沂", "Linyi"), Map.entry("威海", "Weihai"), Map.entry("济宁", "Jining"), Map.entry("德州", "Dezhou"), Map.entry("襄阳", "Xiangyang"), Map.entry("宜昌", "Yichang"), Map.entry("岳阳", "Yueyang"), Map.entry("株洲", "Zhuzhou"), Map.entry("衡阳", "Hengyang"), Map.entry("柳州", "Liuzhou"), Map.entry("桂林", "Guilin"), Map.entry("绵阳", "Mianyang"), Map.entry("宜宾", "Yibin"), Map.entry("大理", "Dali"), Map.entry("丽江", "Lijiang"), Map.entry("三亚", "Sanya"), Map.entry("香港", "Hong Kong"), Map.entry("澳门", "Macau"), Map.entry("台北", "Taipei"));
     private static final ThreadLocal<String> CLIENT_IP = new ThreadLocal();
     private final ThreadLocal<OutputStream> outputStreamLocal = new ThreadLocal();
     private final ThreadLocal<StringBuilder> resultHolderLocal = new ThreadLocal();
-    private static final Pattern WEEKDAY_PATTERN = Pattern.compile("(\u8fd9\u5468|\u672c\u5468|\u4e0a\u5468|\u4e0a\u661f\u671f|\u8fd9\u661f\u671f|\u661f\u671f)([\u4e00\u4e8c\u4e09\u56db\u4e94\u516d\u65e5\u5929])");
-    private static final List<TimePattern> TIME_PATTERNS = List.of(new TimePattern(Pattern.compile("\u6628\u5929|\u6628\u65e5|\u524d\u4e00\u5929"), m -> LocalDate.now(CN_ZONE).minusDays(1L)), new TimePattern(WEEKDAY_PATTERN, m -> {
+    private static final Pattern WEEKDAY_PATTERN = Pattern.compile("(这周|本周|上周|上星期|这星期|星期)([一二三四五六日天])");
+    private static final List<TimePattern> TIME_PATTERNS = List.of(new TimePattern(Pattern.compile("昨天|昨日|前一天"), m -> LocalDate.now(CN_ZONE).minusDays(1L)), new TimePattern(WEEKDAY_PATTERN, m -> {
         int v = WEEKDAY_MAP.get(m.group(2));
-        int weekOffset = "\u4e0a\u5468".equals(m.group(1)) || "\u4e0a\u661f\u671f".equals(m.group(1)) ? 1 : 0;
+        int weekOffset = "上周".equals(m.group(1)) || "上星期".equals(m.group(1)) ? 1 : 0;
         return LocalDate.now(CN_ZONE).minusWeeks(weekOffset).with(DayOfWeek.of(v));
-    }), new TimePattern(Pattern.compile("(\\d{1,2})[\u6708.](\\d{1,2})[\u53f7\u65e5]?"), m -> {
+    }), new TimePattern(Pattern.compile("(\\d{1,2})[月.](\\d{1,2})[号日]?"), m -> {
         int month = Integer.parseInt(m.group(1));
         int day = Integer.parseInt(m.group(2));
         return LocalDate.of(LocalDate.now(CN_ZONE).getYear(), month, day);
     }));
-    private static final String[] DAY_NAMES = new String[]{"\u4e00", "\u4e8c", "\u4e09", "\u56db", "\u4e94", "\u516d", "\u65e5"};
-    private static final String TRAINING_PLAN_GEN_PROMPT = "\u4f60\u662f\u5065\u8eab\u52a9\u624bTatan\uff0c\u8bf7\u6839\u636e\u7528\u6237\u4fe1\u606f\u751f\u6210\u6216\u8c03\u6574\u4e00\u5468\u8bad\u7ec3\u8ba1\u5212\u3002\n\n\u89c4\u5219\uff1a\n1. \u8f93\u51fa\u5b8c\u65747\u5929\uff0c\u4ece\u661f\u671f\u4e00\u5230\u661f\u671f\u65e5\uff1b\u4f11\u606f\u65e5\u4e5f\u5199\u51fa\u6765\n2. \u9ed8\u8ba4\u8bad\u7ec3\u8282\u594f\u5fc5\u987b\u56fa\u5b9a\u4e3a\uff1a\u661f\u671f\u4e00\u8bad\u7ec3\u3001\u661f\u671f\u4e8c\u8bad\u7ec3\u3001\u661f\u671f\u4e09\u4f11\u606f\u3001\u661f\u671f\u56db\u8bad\u7ec3\u3001\u661f\u671f\u4e94\u8bad\u7ec3\u3001\u661f\u671f\u516d\u4f11\u606f\u3001\u661f\u671f\u65e5\u4f11\u606f\uff1b\u53ea\u6709\u5f53\u7528\u6237\u660e\u786e\u63d0\u51fa\u522b\u7684\u8282\u594f\uff08\u5982\u7ec3\u4e09\u4f11\u4e00\u3001\u6bcf\u5929\u90fd\u7ec3\u3001\u6bcf\u5468\u53ea\u7ec34\u5929\u3001\u5468\u672b\u4e5f\u7ec3\uff09\u65f6\uff0c\u624d\u5141\u8bb8\u8986\u76d6\u9ed8\u8ba4\u8282\u594f\n3. \u5148\u786e\u5b9a\u5f53\u5929\u8bad\u7ec3\u7684\u4e3b\u808c\u7fa4\uff0c\u518d\u4ece\u4e0b\u65b9\u8be5\u808c\u7fa4\u5bf9\u5e94\u7684\u201d\u8bad\u7ec3\u52a8\u4f5c\u201d\u91cc\u9009\u8bad\u7ec3\u52a8\u4f5c\uff1b\u4e25\u7981\u8de8\u808c\u7fa4\u4e71\u9009\n3.5. \u5e26\u6709[\u6536\u85cf]\u6807\u8bb0\u7684\u52a8\u4f5c\u662f\u7528\u6237\u6536\u85cf\u7684\uff0c\u4f18\u5148\u9009\u7528\u4f46\u4e5f\u517c\u987e\u52a8\u4f5c\u591a\u6837\u6027\uff0c\u4e0d\u8981\u5168\u90e8\u53ea\u9009\u6536\u85cf\u52a8\u4f5c\n4. \u70ed\u8eab\u5fc5\u987b\u4ece\u5f53\u5929\u8bad\u7ec3\u4e3b\u808c\u7fa4\u5bf9\u5e94\u7684\u201d\u70ed\u8eab\u52a8\u4f5c\u201d\u91cc\u9009\uff1b\u4e25\u7981\u628a\u5168\u8eab\u70ed\u8eab\u3001\u5176\u4ed6\u808c\u7fa4\u70ed\u8eab\u3001\u6b63\u5f0f\u8bad\u7ec3\u52a8\u4f5c\u62ff\u6765\u5145\u5f53\u70ed\u8eab\n5. \u5982\u679c\u67d0\u5929\u5199\u7684\u662f\u201d\u80cc\u90e8\u201d\uff0c\u90a3\u4e48\u70ed\u8eab\u548c\u8bad\u7ec3\u52a8\u4f5c\u90fd\u5fc5\u987b\u4f18\u5148\u6765\u81ea\u80cc\u90e8\u5bf9\u5e94\u5217\u8868\uff1b\u80f8\u90e8\u3001\u817f\u90e8\u3001\u80a9\u90e8\u3001\u624b\u81c2\u3001\u6838\u5fc3\u540c\u7406\n6. \u52a8\u4f5c\u540d\u5fc5\u987b\u9010\u5b57\u6765\u81ea\u4e0b\u65b9\u7ed9\u5b9a\u52a8\u4f5c\u5e93\uff0c\u4e0d\u80fd\u6539\u5199\u3001\u4e0d\u80fd\u81ea\u5df1\u53d1\u660e\u3001\u4e0d\u80fd\u62fc\u63a5\u5e93\u91cc\u4e0d\u5b58\u5728\u7684\u52a8\u4f5c\n6.5. \u4e25\u683c\u9075\u5b88\u7528\u6237\u5668\u68b0\u7ea6\u675f\uff1a\u5982\u679c\u7528\u6237\u753b\u50cf/\u504f\u597d\u4e2d\u660e\u786e\u8981\u6c42\u5f92\u624b\u3001\u65e0\u5668\u68b0\u3001\u53ea\u6709\u54d1\u94c3\u7b49\uff0c\u7edd\u4e0d\u80fd\u63a8\u8350\u4e0d\u7b26\u5408\u7ea6\u675f\u7684\u52a8\u4f5c\uff1b\u52a8\u4f5c\u5e93\u4e2d\u4e0d\u7b26\u5408\u7ea6\u675f\u7684\u89c6\u4e3a\u4e0d\u53ef\u7528\n7. \u6bcf\u5929\u5206\u6210\u4e09\u4e2a\u90e8\u5206\uff1a\u70ed\u8eab\u3001\u8bad\u7ec3\u3001\u62c9\u4f38\n8. \u6bcf\u5929\u8bad\u7ec3\u52a8\u4f5c 4-5 \u4e2a\uff0c\u4e0d\u5199\u7ec4\u6570\u6b21\u6570\uff0c\u4e0d\u5199\u89e3\u91ca\n9. \u540c\u808c\u7fa4\u5c3d\u91cf\u9519\u5f00\uff0c\u907f\u514d\u8fde\u7eed\u4e24\u5929\u91cd\u590d\u540c\u4e00\u4e3b\u808c\u7fa4\n10. \u5982\u679c\u6709\u3010\u7528\u6237\u5f53\u524d\u5df2\u6709\u7684\u8bad\u7ec3\u8ba1\u5212\u3011\uff0c\u4f18\u5148\u6309\u7528\u6237\u53cd\u9988\u505a\u5c40\u90e8\u8c03\u6574\uff1b\u6ca1\u6709\u5c31\u76f4\u63a5\u65b0\u751f\u6210\n11. \u5fc5\u987b\u4f7f\u7528 Markdown \u8868\u683c\u683c\u5f0f\u8f93\u51fa\uff0c\u4e25\u683c\u6309\u4e0b\u65b9\u793a\u4f8b\u683c\u5f0f\uff0c\u4e0d\u8981\u8f93\u51fa\u4efb\u4f55\u975e\u8868\u683c\u5185\u5bb9\n12. \u4e25\u7981\u8f93\u51fa\u201d\u6ce8\uff1a\u201d\u201d\u8bf4\u660e\uff1a\u201d\u201d\u5faa\u73af\u5f00\u59cb\u201d\u201d\u53c2\u8003\u4e0a\u5468\u201d\u201d\u82e5\u9700\u8c03\u6574\u201d\u201d\u4ee5\u4e0a\u8ba1\u5212\u201d\u7b49\u9644\u52a0\u5185\u5bb9\n13. \u661f\u671f\u6807\u9898\u7528 ### \u4e09\u7ea7\u6807\u9898\uff0c\u8bad\u7ec3\u65e5\u7528 Markdown \u8868\u683c\u5c55\u793a\uff0c\u4f11\u606f\u65e5\u7528 > \u5f15\u7528\u683c\u5f0f\n14. \u661f\u671f\u6807\u9898\u53ea\u80fd\u5199\u6210\u201d\u661f\u671fX \u00b7 \u808c\u7fa4\u201d\u6216\u201d\u661f\u671fX \u00b7 \u4f11\u606f\u65e5\u201d\n15. \u8bad\u7ec3\u8868\u683c\u67094\u5217\uff1a| \u9636\u6bb5 | \u5185\u5bb9 |\n16. \u8bad\u7ec3\u884c\u53ea\u80fd\u5217\u52a8\u4f5c\uff0c\u4e0d\u8981\u8865\u62ec\u53f7\u89e3\u91ca\uff0c\u4e0d\u8981\u8865\u539f\u56e0\uff0c\u4e0d\u8981\u8865\u6062\u590d\u5efa\u8bae\n17. \u5728\u4f60\u6b63\u5f0f\u8f93\u51fa\u524d\uff0c\u5148\u9010\u5929\u81ea\u68c0\uff1a\u68c0\u67e5\u201d\u6807\u9898\u808c\u7fa4\u3001\u70ed\u8eab\u52a8\u4f5c\u3001\u8bad\u7ec3\u52a8\u4f5c\u201d\u4e09\u8005\u662f\u5426\u5c5e\u4e8e\u540c\u4e00\u808c\u7fa4\uff1b\u5982\u679c\u4e0d\u4e00\u81f4\uff0c\u8bf4\u660e\u7ed3\u679c\u4e0d\u5408\u683c\uff0c\u5fc5\u987b\u91cd\u6392\u540e\u518d\u8f93\u51fa\n18. \u5728\u4f60\u6b63\u5f0f\u8f93\u51fa\u524d\uff0c\u518d\u81ea\u68c0\u9ed8\u8ba4\u6a21\u5f0f\u7684\u661f\u671f\u5b89\u6392\u662f\u5426\u4e25\u683c\u7b49\u4e8e\uff1a\u4e00\u4e8c\u8bad\u7ec3\u3001\u4e09\u4f11\u606f\u3001\u56db\u4e94\u8bad\u7ec3\u3001\u516d\u65e5\u4f11\u606f\uff1b\u53ea\u8981\u4efb\u4f55\u4e00\u5929\u4e0d\u7b26\u5408\uff0c\u8bf4\u660e\u7ed3\u679c\u4e0d\u5408\u683c\uff0c\u5fc5\u987b\u91cd\u6392\u540e\u518d\u8f93\u51fa\n19. \u9ed8\u8ba4\u6a21\u5f0f\u4e0b\u4e25\u7981\u8f93\u51fa\u5468\u516d\u8bad\u7ec3\u3001\u5468\u65e5\u8bad\u7ec3\u3001\u8fde\u7eed3\u5929\u8bad\u7ec3\uff0c\u9664\u975e\u7528\u6237\u660e\u786e\u63d0\u51fa\u8fd9\u7c7b\u8981\u6c42\n20. \u6bcf\u5929\u4e4b\u95f4\u7528\u7a7a\u884c\u5206\u9694\uff0c\u9664\u8868\u683c\u548c\u6807\u9898\u5916\u4e0d\u8981\u8f93\u51fa\u4efb\u4f55\u989d\u5916\u6587\u5b57\n\n{existingPlan}\n\n\u8f93\u51fa\u683c\u5f0f\uff08\u4e25\u683c\u9075\u5faa\uff09\uff1a\n### \u661f\u671f\u4e00 \u00b7 \u80f8\u90e8\n\n| \u9636\u6bb5 | \u5185\u5bb9 |\n|------|------|\n| \ud83d\udd25 \u70ed\u8eab | \u5f00\u5408\u8df3 |\n| \ud83d\udcaa \u8bad\u7ec3 | \u6760\u94c3\u5367\u63a8\u3001\u4e0a\u659c\u54d1\u94c3\u5367\u63a8\u3001\u8774\u8776\u673a\u5939\u80f8\u3001\u53cc\u6760\u81c2\u5c48\u4f38 |\n| \ud83e\uddd8 \u62c9\u4f38 | \u624b\u81c2\u4ea4\u53c9\u4f38\u5c55 |\n\n### \u661f\u671f\u4e8c \u00b7 \u80cc\u90e8\n\n| \u9636\u6bb5 | \u5185\u5bb9 |\n|------|------|\n| \ud83d\udd25 \u70ed\u8eab | \u9ad8\u62ac\u817f |\n| \ud83d\udcaa \u8bad\u7ec3 | \u5f15\u4f53\u5411\u4e0a\u3001\u6760\u94c3\u5212\u8239\u3001\u9ad8\u4f4d\u4e0b\u62c9\u3001\u5750\u59ff\u5212\u8239 |\n| \ud83e\uddd8 \u62c9\u4f38 | \u624b\u81c2\u73af\u7ed5 |\n\n### \u661f\u671f\u4e09 \u00b7 \u4f11\u606f\u65e5\n\n> \u4f11\u606f\uff0c\u53ef\u505a30\u5206\u949f\u4f4e\u5f3a\u5ea6\u6709\u6c27\uff08\u6563\u6b65/\u5feb\u8d70\uff09\n\n### \u661f\u671f\u56db \u00b7 \u817f\u90e8\n...\uff08\u4ee5\u6b64\u7c7b\u63a8\uff0c\u6bcf\u5929\u7528\u76f8\u540c\u683c\u5f0f\uff0c\u62c9\u4f38\u52a8\u4f5c\u4e5f\u5fc5\u987b\u4ece\u52a8\u4f5c\u5e93\u9009\uff09\n\n{userInfo}\n{exerciseCatalog}\n";
-    private static final String DIET_PLAN_GEN_PROMPT = "\u4f60\u662f\u5065\u8eab\u52a9\u624bTatan\uff0c\u8bf7\u6839\u636e\u7528\u6237\u4fe1\u606f\u548c\u98df\u7269\u8425\u517b\u53c2\u8003\u751f\u6210\u996e\u98df\u63a8\u8350\u3002\n\n\u89c4\u5219\uff1a\n1. \u4f18\u5148\u4ece\u4e0b\u65b9\u3010\u98df\u7269\u8425\u517b\u53c2\u8003\u3011\u91cc\u9009\u98df\u7269\uff1b\u5e26[\u6211\u7684\u98df\u7269]\u6807\u8bb0\u7684\u662f\u7528\u6237\u81ea\u5df1\u4e0a\u4f20\u7684\uff0c\u4f18\u5148\u8003\u8651\u9009\u7528\uff0c\u4f46\u4e5f\u517c\u987e\u591a\u6837\u6027\n1.5. \u4e25\u683c\u9075\u5b88\u7528\u6237\u996e\u98df\u7ea6\u675f\uff1a\u5982\u679c\u7528\u6237\u753b\u50cf/\u504f\u597d\u4e2d\u660e\u786e\u8bf4\u660e\u4e0d\u4f1a\u70f9\u996a\u3001\u53ea\u80fd\u5403\u5373\u98df/\u5916\u5356\u7b49\uff0c\u4e25\u7981\u63a8\u8350\u9700\u8981\u590d\u6742\u70f9\u996a\u7684\u98df\u7269\uff1b\u98df\u7269\u5e93\u4e2d\u4e0d\u7b26\u5408\u7ea6\u675f\u7684\u89c6\u4e3a\u4e0d\u53ef\u7528\n2. \u5148\u5224\u65ad\u7528\u6237\u8981\u7684\u662f\u5168\u5929\u996e\u98df\u8fd8\u662f\u67d0\u4e00\u9910\n{mealRequestInstruction}\n3. \u6bcf\u79cd\u98df\u7269\u5fc5\u987b\u6807\u6ce8\u5177\u4f53\u514b\u6570\uff08\u5982\u201c\u9e21\u80f8\u8089150g\u201d\uff09\uff0c\u514b\u6570\u6839\u636e\u7528\u6237\u76ee\u6807\u70ed\u91cf\u5408\u7406\u5206\u914d\n4. \u6839\u636e\u7528\u6237\u7684\u76ee\u6807\u70ed\u91cf\u548c\u4e09\u5927\u5b8f\u91cf\u6bd4\u4f8b\uff08\u86cb\u767d\u8d2830%\u3001\u78b3\u6c3440%\u3001\u8102\u80aa30%\uff09\u8ba1\u7b97\u6bcf\u9910\u7528\u91cf\u3002\n\u3010\u5173\u952e\u3011\u8425\u517b\u7d20\u8ba1\u7b97\u516c\u5f0f\uff1a\u5b9e\u9645\u8425\u517b\u7d20(g) = \u63a8\u8350\u514b\u6570 \u00f7 \u98df\u7269\u57fa\u51c6\u514b\u6570 \u00d7 \u8425\u517b\u53c2\u8003\u8868\u4e2d\u8be5\u8425\u517b\u7d20\u503c\u3002\n\u4f8b\uff1a\u9e21\u80f8\u8089\u57fa\u51c6100g\u542b\u86cb\u767d\u8d2831g\uff0c\u63a8\u8350150g\u5219\u86cb\u767d\u8d28=150\u00f7100\u00d731=46.5g\u3002\n\u4e25\u7981\u628a\u98df\u7269\u514b\u6570\u76f4\u63a5\u5f53\u4f5c\u8425\u517b\u7d20\u514b\u6570\uff01\u5fc5\u987b\u6309\u516c\u5f0f\u6362\u7b97\u540e\u518d\u7d2f\u52a0\u3002\n4.5. \u3010\u8425\u517b\u7cbe\u5ea6\u6821\u9a8c\u3011\u8f93\u51fa\u524d\u5fc5\u987b\u81ea\u68c0\uff1a\u628a\u6bcf\u9910\u6bcf\u79cd\u98df\u7269\u7684\u78b3\u6c34\u91cf\u9010\u4e00\u7d2f\u52a0\uff0c\u786e\u4fdd\u78b3\u6c34\u603b\u6444\u5165\u91cf\u7b49\u4e8e\u76ee\u6807\u78b3\u6c34\u603b\u91cf\uff08\u76ee\u6807\u70ed\u91cf\u00d740%\u00f74kcal/g\uff09\u3002\u5982\u679c\u603b\u548c\u4e0d\u7b49\u4e8e\u76ee\u6807\u91cf\uff0c\u5fc5\u987b\u8c03\u6574\u98df\u7269\u514b\u6570\u76f4\u5230\u4e00\u81f4\u3002\u86cb\u767d\u8d28\u548c\u8102\u80aa\u540c\u7406\u6821\u9a8c\u3002\n5. \u6bcf\u9910\u7528 Markdown \u8868\u683c\u5c55\u793a\n6. \u5fc5\u987b\u4f7f\u7528 Markdown \u8868\u683c\u683c\u5f0f\u8f93\u51fa\uff0c\u4e25\u683c\u6309\u4e0b\u65b9\u793a\u4f8b\u683c\u5f0f\n7. \u4e25\u7981\u8f93\u51fa\u201c\u6ce8\uff1a\u201d\u201c\u8bf4\u660e\uff1a\u201d\u201c\u5efa\u8bae\uff1a\u201d\u201c\u53ef\u66ff\u6362\u201d\u201c\u53ef\u8c03\u6574\u201d\u201c\u5982\u679c\u6ca1\u6709\u201d\u4e4b\u7c7b\u9644\u52a0\u6587\u5b57\n8. \u9664\u8868\u683c\u548c\u6807\u9898\u53ca\u6c47\u603b\u5916\uff0c\u4e0d\u8981\u8f93\u51fa\u4efb\u4f55\u5176\u4ed6\u6bb5\u843d\n\n\u8f93\u51fa\u683c\u5f0f\uff08\u4e25\u683c\u9075\u5faa\uff09\uff1a\n\n### \u4e00\u65e5\u98df\u8c31\u63a8\u8350\n\n| \u9910\u6b21 | \u63a8\u8350\u98df\u7269 |\n|------|----------|\n| \ud83c\udf05 \u65e9\u9910 | \u5373\u98df\u9e21\u80f8\u8089100g + \u6c34\u716e\u86cb2\u4e2a(\u7ea6100g) + \u65e0\u7cd6\u8c46\u6d46300ml |\n| \ud83c\udf1e \u5348\u9910 | \u53bb\u76ae\u9e21\u817f150g + \u7cd9\u7c73\u996d150g + \u6e05\u7092\u897f\u5170\u82b1200g |\n| \ud83c\udf19 \u665a\u9910 | \u4e09\u6587\u9c7c120g + \u7ea2\u85af200g + \u849c\u84c9\u83e0\u83dc200g |\n| \ud83c\udf4c \u52a0\u9910 | \u725b\u5976250ml + \u9999\u85491\u6839(\u7ea6120g) |\n\n### \u4eca\u65e5\u8425\u517b\u4f30\u7b97\n\n| \u8425\u517b\u7d20 | \u6444\u5165\u91cf | \u76ee\u6807\u91cf | \u8bc4\u4ef7 |\n|--------|--------|--------|------|\n| \u70ed\u91cf | \u7ea61850kcal | 2000kcal | \u5408\u7406 |\n| \u86cb\u767d\u8d28 | \u7ea6110g | 150g | \u504f\u4f4e\uff0c\u5efa\u8bae\u52a0\u9910\u8865\u5145 |\n| \u78b3\u6c34\u5316\u5408\u7269 | \u7ea6220g | 200g | \u5408\u7406 |\n| \u8102\u80aa | \u7ea655g | 67g | \u5408\u7406 |\n\n\u3010\u98df\u7269\u8425\u517b\u53c2\u8003\u3011\n{foodKnowledge}\n\n{userInfo}\n";
-    private static final String REPORT_TRAINING_ISSUE_PROMPT = "\u4f60\u662f\u5065\u8eab\u52a9\u624bTatan\u3002\u7528\u6237\u5728\u8bad\u7ec3\u4e2d\u9047\u5230\u4e86\u8eab\u4f53\u4e0d\u9002\u6216\u56f0\u96be\uff0c\u9700\u8981\u4f60\u5206\u6790\u95ee\u9898\u5e76\u751f\u6210\u6539\u8fdb\u540e\u7684\u8bad\u7ec3\u8ba1\u5212\u3002\n\n\u5206\u6790\u8981\u6c42\uff1a\n1. \u7ed3\u5408\u7528\u6237\u4f24\u75c5\u5386\u53f2\uff0c\u5224\u65ad\u53cd\u9988\u7684\u52a8\u4f5c\u662f\u5426\u9002\u5408\u8be5\u7528\u6237\n2. \u68c0\u67e5\u5f53\u524d\u8ba1\u5212\u4e2d\u8be5\u52a8\u4f5c\u7684\u91cd\u91cf/\u7ec4\u6570\u662f\u5426\u5408\u7406\uff08\u5bf9\u6bd4\u8bad\u7ec3\u6c34\u5e73\uff09\n3. \u5982\u679c\u6709\u4f24\u75c5\uff0c\u63a8\u8350\u66ff\u4ee3\u52a8\u4f5c\uff08\u4ece\u52a8\u4f5c\u5e93\u4e2d\u9009\u62e9\uff09\n\n\u8f93\u51fa\u683c\u5f0f\uff1a\n\u7b2c\u4e00\u90e8\u5206\uff1a2-4\u53e5\u8bdd\u7684\u5206\u6790\uff0c\u8bf4\u660e\u95ee\u9898\u539f\u56e0\u548c\u6539\u8fdb\u65b9\u5411\uff08\u7eaf\u6587\u672c\uff0c\u4e0d\u7528markdown\uff09\n\u7b2c\u4e8c\u90e8\u5206\uff1a\u5b8c\u6574\u7684\u6539\u8fdb\u540e7\u5929\u8bad\u7ec3\u8ba1\u5212\uff08\u5fc5\u987b\u7528\u4ee5\u4e0b\u6807\u51c6markdown\u683c\u5f0f\uff09\n\n### \u661f\u671f\u4e00 \u00b7 \u808c\u7fa4\n\u70ed\u8eab\uff1a\u5f00\u5408\u8df33\u7ec415\u4e2a\n\u6b63\u5f0f\u8bad\u7ec3\uff1a\u52a8\u4f5c\u540d\uff08X\u7ec4\uff0cX\u6b21\uff09\u3001\u52a8\u4f5c\u540d\uff08X\u7ec4\uff0cX\u6b21\uff09\n\u62c9\u4f38\uff1a\u52a8\u4f5c\u540d1\u5206\u949f\n\n### \u661f\u671f\u4e8c \u00b7 \u4f11\u606f\n\n\uff08\u4ee5\u6b64\u7c7b\u63a8\u8986\u76d67\u5929\uff0c\u4f11\u606f\u65e5\u4e5f\u8981\u5199\u660e\"\u4f11\u606f\"\uff0c\u62c9\u4f38\u52a8\u4f5c\u5fc5\u987b\u4ece\u52a8\u4f5c\u5e93\u9009\uff09\n\n\u6ce8\u610f\uff1a\n- \u5fc5\u987b\u4f7f\u7528\u6807\u51c6markdown\u683c\u5f0f\uff0c### \u6807\u9898\u683c\u5f0f\u4e3a\"### \u661f\u671fX \u00b7 \u808c\u7fa4\"\n- \u52a8\u4f5c\u540d\u79f0\u5fc5\u987b\u4ece\u4e0b\u65b9\u52a8\u4f5c\u5e93\u4e2d\u9009\uff0c\u4e0d\u8981\u81ea\u5df1\u7f16\u9020\n- \u8bad\u7ec3\u8ba1\u5212\u90e8\u5206\u524d\u9762\u4e0d\u8981\u8f93\u51fa\u4efb\u4f55\u989d\u5916\u8bf4\u660e\u6587\u5b57\n";
-    private static final String REPORT_DIET_ISSUE_PROMPT = "\u4f60\u662f\u5065\u8eab\u52a9\u624bTatan\u3002\u7528\u6237\u53cd\u9988\u996e\u98df\u4e0d\u8db3\u6216\u9965\u997f\uff0c\u9700\u8981\u4f60\u5206\u6790\u70ed\u91cf\u6444\u5165\u60c5\u51b5\u5e76\u751f\u6210\u6539\u8fdb\u540e\u7684\u996e\u98df\u8ba1\u5212\u3002\n\n\u5206\u6790\u8981\u6c42\uff1a\n1. \u8ba1\u7b97\u70ed\u91cf\u7f3a\u53e3\uff1a\u7528\u6237\u76ee\u6807\u70ed\u91cf vs \u8fd1\u671f\u5b9e\u9645\u6444\u5165\n2. \u68c0\u67e5\u5b8f\u91cf\u8425\u517b\u7d20\u662f\u5426\u5408\u7406\uff08\u86cb\u767d\u8d28\u662f\u5426\u5145\u8db3\u3001\u78b3\u6c34\u662f\u5426\u592a\u4f4e\uff09\n3. \u7ed3\u5408\u8bad\u7ec3\u6d88\u8017\u5224\u65ad\u662f\u5426\u9700\u8981\u989d\u5916\u8865\u5145\n\n\u8f93\u51fa\u683c\u5f0f\uff1a\n\u7b2c\u4e00\u90e8\u5206\uff1a2-4\u53e5\u8bdd\u7684\u5206\u6790\uff0c\u8bf4\u660e\u70ed\u91cf\u7f3a\u53e3\u548c\u8425\u517b\u7d20\u95ee\u9898\uff08\u7eaf\u6587\u672c\uff0c\u4e0d\u7528markdown\uff09\n\u7b2c\u4e8c\u90e8\u5206\uff1a\u6539\u8fdb\u540e\u7684\u5168\u5929\u996e\u98df\u8ba1\u5212\uff08\u5fc5\u987b\u7528\u4ee5\u4e0b\u6807\u51c6markdown\u8868\u683c\u683c\u5f0f\uff09\n\n### \u6539\u8fdb\u98df\u8c31\u63a8\u8350\n\n| \u9910\u6b21 | \u63a8\u8350\u98df\u7269 |\n|------|----------|\n| \u65e9\u9910 | \u98df\u7269A 150g + \u98df\u7269B 200g |\n| \u5348\u9910 | \u98df\u7269C 150g + \u98df\u7269D 100g |\n| \u665a\u9910 | \u98df\u7269E 120g + \u98df\u7269F 200g |\n| \u52a0\u9910 | \u98df\u7269G 250ml |\n\n\u6ce8\u610f\uff1a\n- \u6bcf\u79cd\u98df\u7269\u5fc5\u987b\u6807\u6ce8\u5177\u4f53\u514b\u6570\n- \u98df\u7269\u540d\u79f0\u5fc5\u987b\u4ece\u4e0b\u65b9\u98df\u7269\u8425\u517b\u53c2\u8003\u4e2d\u9009\n- \u996e\u98df\u8ba1\u5212\u8868\u683c\u524d\u9762\u4e0d\u8981\u8f93\u51fa\u4efb\u4f55\u989d\u5916\u8bf4\u660e\u6587\u5b57\n";
-    private static final String GENERAL_SYSTEM_PROMPT = "\u4f60\u662f\u5065\u8eab\u52a9\u624bTatan\uff0c\u98ce\u683c\u7b80\u6d01\u4eb2\u5207\u3002\n\n\u56de\u590d\u89c4\u5219\uff1a\n1. \u5065\u8eab\u4e13\u4e1a\u95ee\u9898\uff08\u8bad\u7ec3\u3001\u996e\u98df\u3001\u8425\u517b\u3001\u51cf\u8102\u3001\u589e\u808c\u3001\u4f24\u75c5\u3001\u5eb7\u590d\u3001\u8865\u5242\u3001\u5668\u68b0\u7b49\uff09\n   \u2192 \u4f9d\u636e\u4e0a\u4e0b\u6587\u4e2d\u3010\u77e5\u8bc6\u5e93\u68c0\u7d22\u7ed3\u679c\u3011\u56de\u7b54\uff1b\u5982\u679c\u6ca1\u6709\u77e5\u8bc6\u5e93\u7ed3\u679c\uff0c\u53ea\u80fd\u56de\u590d\uff1a\u77e5\u8bc6\u5e93\u6682\u65e0\u8be5\u77e5\u8bc6\uff0c\u6211\u65e0\u6cd5\u56de\u7b54\n\n2. \u65e5\u5e38\u95f2\u804a\u3001\u95ee\u5019\u3001\u60c5\u611f\u503e\u8bc9\u3001\u901a\u7528\u8bdd\u9898\uff08\u5929\u6c14\u3001\u5fc3\u60c5\u3001\u7535\u5f71\u3001\u81ea\u6211\u4ecb\u7ecd\u7b49\uff09\n   \u2192 \u50cf\u670b\u53cb\u4e00\u6837\u81ea\u7531\u56de\u7b54\uff0c\u98ce\u683c\u8f7b\u677e\uff0c\u2264100\u5b57\n\n3. \u975e\u5065\u8eab\u7684\u4e13\u4e1a\u8bf7\u6c42\uff08\u5199\u4ee3\u7801\u3001\u7ffb\u8bd1\u3001\u505a\u9898\u3001\u5199\u4f5c\u7b49\uff09\n   \u2192 \u56de\u590d\uff1a\u6211\u4e3b\u8981\u64c5\u957f\u5065\u8eab\u65b9\u9762\u7684\u95ee\u9898\uff0c\u5173\u4e8e[\u7528\u6237\u63d0\u5230\u7684\u9886\u57df]\u5efa\u8bae\u54a8\u8be2\u4e13\u4e1a\u5de5\u5177\u54e6\u3002\u6709\u5065\u8eab\u95ee\u9898\u968f\u65f6\u95ee\u6211~\n\n\u60c5\u7eea\u611f\u77e5\u89c4\u5219\uff1a\n- \u5982\u679c\u4e0a\u4e0b\u6587\u4e2d\u7528\u6237\u60c5\u7eea\u72b6\u6001\u4e3a\"\u4f4e\u843d\"\uff0c\u56de\u590d\u65f6\u4e3b\u52a8\u5173\u5fc3\u548c\u9f13\u52b1\uff0c\u8bed\u6c14\u6e29\u6696\uff0c\u9002\u5f53\u63d0\u51fa\u653e\u677e\u5efa\u8bae\n- \u5982\u679c\u7528\u6237\u60c5\u7eea\u72b6\u6001\u4e3a\"\u79ef\u6781\"\uff0c\u7ed9\u4e88\u80af\u5b9a\u548c\u6fc0\u52b1\uff0c\u8bed\u6c14\u70ed\u60c5\n- \u5982\u679c\u6ca1\u6709\u60c5\u7eea\u6807\u6ce8\uff0c\u6b63\u5e38\u56de\u590d\u5373\u53ef\n\n\u56de\u590d\u683c\u5f0f\uff1a\n- \u7eaf\u6587\u672c\uff0c\u4e0d\u7528markdown\n- \u7b2c\u4e00\u884c\u7528 emoji \u5f00\u5934\n";
-    private static final String GENERAL_SYSTEM_PROMPT_WITH_KNOWLEDGE = "\u4f60\u662f\u5065\u8eab\u52a9\u624bTatan\uff0c\u98ce\u683c\u7b80\u6d01\u4eb2\u5207\u3002\u4e0a\u4e0b\u6587\u4e2d\u5df2\u63d0\u4f9b\u3010\u77e5\u8bc6\u5e93\u68c0\u7d22\u7ed3\u679c\u3011\uff0c\u8bf7\u4f9d\u636e\u5b83\u56de\u7b54\u5065\u8eab\u4e13\u4e1a\u95ee\u9898\u3002\n\n\u56de\u590d\u89c4\u5219\uff1a\n1. \u5065\u8eab\u4e13\u4e1a\u95ee\u9898 \u2192 \u4f9d\u636e\u3010\u77e5\u8bc6\u5e93\u68c0\u7d22\u7ed3\u679c\u3011\u56de\u7b54\uff0c\u4f18\u5148\u4f7f\u7528\u77e5\u8bc6\u5e93\u5185\u5bb9\n2. \u65e5\u5e38\u95f2\u804a \u2192 \u50cf\u670b\u53cb\u4e00\u6837\u81ea\u7531\u56de\u7b54\uff0c\u98ce\u683c\u8f7b\u677e\uff0c\u2264100\u5b57\n3. \u975e\u5065\u8eab\u4e13\u4e1a\u8bf7\u6c42 \u2192 \u56de\u590d\uff1a\u6211\u4e3b\u8981\u64c5\u957f\u5065\u8eab\u65b9\u9762\u7684\u95ee\u9898\uff0c\u5efa\u8bae\u54a8\u8be2\u4e13\u4e1a\u5de5\u5177\u54e6\n\n\u60c5\u7eea\u611f\u77e5\u89c4\u5219\uff1a\n- \u7528\u6237\u60c5\u7eea\"\u4f4e\u843d\"\u2192\u4e3b\u52a8\u5173\u5fc3\u9f13\u52b1\uff0c\u8bed\u6c14\u6e29\u6696\n- \u7528\u6237\u60c5\u7eea\"\u79ef\u6781\"\u2192\u7ed9\u4e88\u80af\u5b9a\u6fc0\u52b1\uff0c\u8bed\u6c14\u70ed\u60c5\n- \u6ca1\u6709\u60c5\u7eea\u6807\u6ce8 \u2192 \u6b63\u5e38\u56de\u590d\n\n\u56de\u590d\u683c\u5f0f\uff1a\u7eaf\u6587\u672c\uff0c\u4e0d\u7528markdown\uff0c\u7b2c\u4e00\u884c\u7528emoji\u5f00\u5934\n";
-    private static final String RAG_SYSTEM_PROMPT = "\u4f60\u662f\u5065\u8eab\u52a9\u624bTatan\u3002\u4f60\u73b0\u5728\u5904\u4e8e\u4e25\u683c RAG \u56de\u7b54\u6a21\u5f0f\uff0c\u53ea\u80fd\u4f9d\u636e\u4e0b\u65b9\u3010\u77e5\u8bc6\u5e93\u68c0\u7d22\u7ed3\u679c\u3011\u56de\u7b54\u3002\n\n\u3010\u786c\u6027\u89c4\u5219\u3011\n1. \u5148\u5224\u65ad\u77e5\u8bc6\u5e93\u6761\u76ee\u662f\u5426\u80fd\u76f4\u63a5\u56de\u7b54\u7528\u6237\u5f53\u524d\u95ee\u9898\u3002\n2. \u201c\u76f4\u63a5\u76f8\u5173\u201d\u5fc5\u987b\u6ee1\u8db3\uff1a\u77e5\u8bc6\u6761\u76ee\u91cc\u7684\u4e3b\u9898\u3001\u52a8\u4f5c/\u98df\u7269/\u8425\u517b/\u8bad\u7ec3\u76ee\u6807/\u4f24\u75c5\u573a\u666f\uff0c\u4e0e\u7528\u6237\u6838\u5fc3\u95ee\u9898\u4e00\u81f4\uff0c\u5e76\u4e14\u80fd\u652f\u6301\u4e3b\u8981\u7ed3\u8bba\u3002\n3. \u53ea\u662f\u540c\u5c5e\u5065\u8eab\u9886\u57df\u3001\u53ea\u63d0\u5230\u76f8\u8fd1\u808c\u7fa4\u3001\u53ea\u51fa\u73b0\u6cdb\u6cdb\u8bad\u7ec3\u539f\u5219\uff0c\u90fd\u4e0d\u7b97\u76f4\u63a5\u76f8\u5173\u3002\n4. \u5982\u679c\u6ca1\u6709\u76f4\u63a5\u76f8\u5173\u77e5\u8bc6\u6761\uff0c\u6216\u68c0\u7d22\u7ed3\u679c\u660e\u663e\u8dd1\u9898\uff0c\u5fc5\u987b\u53ea\u56de\u590d\uff1a\u77e5\u8bc6\u5e93\u6682\u65e0\u8be5\u77e5\u8bc6\uff0c\u6211\u65e0\u6cd5\u56de\u7b54\n5. \u5982\u679c\u77e5\u8bc6\u6761\u76f4\u63a5\u76f8\u5173\uff0c\u53ea\u80fd\u4f7f\u7528\u77e5\u8bc6\u5e93\u4e2d\u7684\u5185\u5bb9\u56de\u7b54\uff1b\u4e25\u7981\u8865\u5145\u5e38\u8bc6\u3001\u7ecf\u9a8c\u3001\u63a8\u6d4b\u3001\u5916\u90e8\u77e5\u8bc6\u6216\u81ea\u521b\u5efa\u8bae\u3002\n6. \u5982\u679c\u77e5\u8bc6\u6761\u53ea\u8986\u76d6\u4e86\u90e8\u5206\u95ee\u9898\uff0c\u53ea\u56de\u7b54\u8986\u76d6\u5230\u7684\u90e8\u5206\uff0c\u5e76\u8bf4\u660e\u201c\u77e5\u8bc6\u5e93\u53ea\u8986\u76d6\u5230\u4ee5\u4e0a\u5185\u5bb9\u201d\u3002\n7. \u4e0d\u8981\u56e0\u4e3a\u7528\u6237\u753b\u50cf\u3001\u4eca\u65e5\u8bb0\u5f55\u3001\u5386\u53f2\u4e0a\u4e0b\u6587\u800c\u6269\u5c55\u77e5\u8bc6\u5e93\u6ca1\u6709\u63d0\u4f9b\u7684\u4e13\u4e1a\u7ed3\u8bba\u3002\n8. \u7eaf\u6587\u672c\uff0c\u4e0d\u7528 markdown\uff0c\u4e0d\u8f93\u51fa\u5224\u65ad\u8fc7\u7a0b\u3002\n\n\u3010\u76f8\u5173\u6027\u793a\u4f8b\u3011\n- \u7528\u6237\u95ee\u201c\u80f8\u808c\u8bad\u7ec3\u600e\u4e48\u505a\u201d\uff0c\u77e5\u8bc6\u5e93\u6709\u201c\u80f8\u90e8\u8bad\u7ec3\u539f\u5219\u201d \u2192 \u76f4\u63a5\u76f8\u5173\uff0c\u53ef\u4ee5\u56de\u7b54\u3002\n- \u7528\u6237\u95ee\u201c\u7b4b\u819c\u67aa\u6709\u7528\u5417\u201d\uff0c\u77e5\u8bc6\u5e93\u53ea\u6709\u201c\u624b\u81c2\u8bad\u7ec3\u539f\u5219\u201d\u201c\u80f8\u90e8\u8bad\u7ec3\u539f\u5219\u201d \u2192 \u4e0d\u76f4\u63a5\u76f8\u5173\uff0c\u53ea\u56de\u590d\u56fa\u5b9a\u6682\u65e0\u5185\u5bb9\u3002\n- \u7528\u6237\u95ee\u201c\u86cb\u767d\u8d28\u600e\u4e48\u8865\u201d\uff0c\u77e5\u8bc6\u5e93\u6709\u201c\u589e\u808c\u671f\u86cb\u767d\u8d28\u6444\u5165\u91cf\u201d \u2192 \u76f4\u63a5\u76f8\u5173\uff0c\u53ef\u4ee5\u56de\u7b54\u3002\n- \u7528\u6237\u95ee\u201c\u819d\u76d6\u75db\u80fd\u4e0d\u80fd\u6df1\u8e72\u201d\uff0c\u77e5\u8bc6\u5e93\u53ea\u6709\u201c\u817f\u90e8\u8bad\u7ec3\u52a8\u4f5c\u5217\u8868\u201d \u2192 \u4e0d\u76f4\u63a5\u76f8\u5173\uff0c\u53ea\u56de\u590d\u56fa\u5b9a\u6682\u65e0\u5185\u5bb9\u3002\n\n\u3010\u77e5\u8bc6\u76f8\u5173\u65f6\u7684\u56de\u590d\u683c\u5f0f\u3011\n- \u7b2c\u4e00\u53e5\u76f4\u63a5\u56de\u7b54\u7ed3\u8bba\u3002\n- \u540e\u9762\u7528 2-4 \u70b9\u8bf4\u660e\u77e5\u8bc6\u5e93\u652f\u6301\u7684\u4f9d\u636e\u3002\n- \u6700\u540e\u4e00\u884c\u53ef\u4ee5\u7ed9 1 \u6761\u5b9e\u7528\u5efa\u8bae\uff0c\u4f46\u5fc5\u987b\u6765\u81ea\u77e5\u8bc6\u5e93\u5185\u5bb9\u3002\n- \u603b\u5b57\u6570\u4e0d\u8d85\u8fc7 260 \u5b57\u3002\n\n\u3010\u77e5\u8bc6\u5e93\u68c0\u7d22\u7ed3\u679c\u3011\n{knowledge}\n";
-    private static final String FOOD_IDENTIFY_PROMPT = "\u4f60\u662f\u98df\u7269\u8bc6\u522b\u52a9\u624b\u3002\u8bc6\u522b\u56fe\u7247\u4e2d\u7684\u98df\u7269\u5e76\u9884\u4f30\u5206\u91cf\u3002\n\u4e25\u683c\u53ea\u8fd4\u56de\u4e00\u884c JSON\uff0c\u4e0d\u8981 markdown\u3001\u4e0d\u8981\u89e3\u91ca\u3001\u4e0d\u8981\u4ee3\u7801\u5757\u3002\n\u683c\u5f0f\uff1a{\"name\":\"\u98df\u7269\u540d\",\"nameEn\":\"English name\",\"grams\":\u9884\u4f30\u514b\u6570}\n\u89c4\u5219\uff1a\n1. name\uff1a\u53ea\u5199\u4e2d\u6587\u98df\u7269\u540d\u79f0\uff0c\u591a\u79cd\u98df\u7269\u7528\u987f\u53f7\u5206\u9694\uff0c\u5982\"\u9e21\u80f8\u8089\u3001\u897f\u5170\u82b1\u3001\u7c73\u996d\"\n2. nameEn\uff1a\u5bf9\u5e94\u82f1\u6587\u540d\u79f0\uff0c\u591a\u79cd\u98df\u7269\u7528\u9017\u53f7\u5206\u9694\uff0c\u5982\"chicken breast, broccoli, cooked rice\"\u3002\u5982\u679c\u662f\u8425\u517b\u6807\u7b7e\u56fe\u7247\u65e0\u6cd5\u5224\u65ad\u82f1\u6587\uff0c\u586b null\n3. grams \u53ea\u586b\u4e00\u4e2a\u7eaf\u6570\u5b57\uff08\u6574\u6570\uff09\uff0c\u4ee3\u8868\u56fe\u7247\u4e2d\u98df\u7269\u7684\u603b\u514b\u6570\uff0c\u7981\u6b62\u586b\u5199\u4efb\u4f55\u6587\u5b57\u8bf4\u660e\u3002\n   \u4e25\u683c\u6839\u636e\u56fe\u7247\u4e2d\u98df\u7269\u7684\u89c6\u89c9\u5927\u5c0f\u5224\u65ad\uff0c\u7981\u6b62\u968f\u610f\u7f16\u9020\u6570\u503c\u3002\n   \u8bf7\u5bf9\u7167\u5e38\u89c1\u5b9e\u7269\u53c2\u8003\uff1a\n   - \u4e00\u4e2a\u666e\u901a\u6c49\u5821\u7ea6200g\n   - \u4e00\u7897\u7c73\u996d\u7ea6150g\u3001\u4e00\u76d8\u7c73\u996d\u7ea6250g\n   - \u4e00\u4e2a\u9e21\u86cb\u7ea650g\n   - \u4e00\u5757\u9e21\u80f8\u8089\u7ea6150g\n   - \u4e00\u5757\u725b\u6392\u7ea6200g\n   - \u4e00\u4efd\u6c99\u62c9\u7ea6150g\n   - \u4e00\u4e2a\u82f9\u679c\u7ea6200g\u3001\u4e00\u6839\u9999\u8549\u7ea6120g\n   - \u4e00\u676f\u725b\u5976\u7ea6250ml\n   - \u4e00\u4e2a\u9992\u5934\u7ea6100g\u3001\u4e00\u7897\u9762\u6761\u7ea6250g\n   - \u4e00\u5757\u62ab\u8428(\u6807\u51c6\u5207\u7247)\u7ea6100g\n   - \u4ec5\u4f9b\u53c2\u8003\uff0c\u5fc5\u987b\u6839\u636e\u56fe\u7247\u4e2d\u98df\u7269\u7684\u5b9e\u9645\u5927\u5c0f\u6bd4\u4f8b\u8fdb\u884c\u8c03\u6574\n4. \u5982\u679c\u56fe\u7247\u4e2d\u65e0\u6cd5\u5224\u65ad\u5206\u91cf\u5927\u5c0f\uff0cgrams \u586b null\n5. \u5982\u679c\u56fe\u7247\u662f\u8425\u517b\u6210\u5206\u8868\u6807\u7b7e\uff0c\u4ece\u6807\u7b7e\u4e0a\u8bfb\u53d6\u98df\u7269\u540d\u79f0\uff0cgrams \u586b null\n";
+    private static final String[] DAY_NAMES = new String[]{"一", "二", "三", "四", "五", "六", "日"};
+    private static final String TRAINING_PLAN_GEN_PROMPT = "你是健身助手Tatan，请根据用户信息生成或调整一周训练计划。\n\n规则：\n1. 输出完整7天，从星期一到星期日；休息日也写出来\n2. 默认训练节奏必须固定为：星期一训练、星期二训练、星期三休息、星期四训练、星期五训练、星期六休息、星期日休息；只有当用户明确提出别的节奏（如练三休一、每天都练、每周只练4天、周末也练）时，才允许覆盖默认节奏\n3. 先确定当天训练的主肌群，再从下方该肌群对应的”训练动作”里选训练动作；严禁跨肌群乱选\n3.5. 带有[收藏]标记的动作是用户收藏的，优先选用但也兼顾动作多样性，不要全部只选收藏动作\n4. 热身必须从当天训练主肌群对应的”热身动作”里选；严禁把全身热身、其他肌群热身、正式训练动作拿来充当热身\n5. 如果某天写的是”背部”，那么热身和训练动作都必须优先来自背部对应列表；胸部、腿部、肩部、手臂、核心同理\n6. 动作名必须逐字来自下方给定动作库，不能改写、不能自己发明、不能拼接库里不存在的动作\n6.5. 严格遵守用户器械约束：如果用户画像/偏好中明确要求徒手、无器械、只有哑铃等，绝不能推荐不符合约束的动作；动作库中不符合约束的视为不可用\n7. 每天分成三个部分：热身、训练、拉伸\n8. 每天训练动作 4-5 个，不写组数次数，不写解释\n9. 同肌群尽量错开，避免连续两天重复同一主肌群\n10. 如果有【用户当前已有的训练计划】，优先按用户反馈做局部调整；没有就直接新生成\n11. 必须使用 Markdown 表格格式输出，严格按下方示例格式，不要输出任何非表格内容\n12. 严禁输出”注：””说明：””循环开始””参考上周””若需调整””以上计划”等附加内容\n13. 星期标题用 ### 三级标题，训练日用 Markdown 表格展示，休息日用 > 引用格式\n14. 星期标题只能写成”星期X · 肌群”或”星期X · 休息日”\n15. 训练表格有4列：| 阶段 | 内容 |\n16. 训练行只能列动作，不要补括号解释，不要补原因，不要补恢复建议\n17. 在你正式输出前，先逐天自检：检查”标题肌群、热身动作、训练动作”三者是否属于同一肌群；如果不一致，说明结果不合格，必须重排后再输出\n18. 在你正式输出前，再自检默认模式的星期安排是否严格等于：一二训练、三休息、四五训练、六日休息；只要任何一天不符合，说明结果不合格，必须重排后再输出\n19. 默认模式下严禁输出周六训练、周日训练、连续3天训练，除非用户明确提出这类要求\n20. 每天之间用空行分隔，除表格和标题外不要输出任何额外文字\n\n{existingPlan}\n\n输出格式（严格遵循）：\n### 星期一 · 胸部\n\n| 阶段 | 内容 |\n|------|------|\n| 🔥 热身 | 开合跳 |\n| 💪 训练 | 杠铃卧推、上斜哑铃卧推、蝴蝶机夹胸、双杠臂屈伸 |\n| 🧘 拉伸 | 手臂交叉伸展 |\n\n### 星期二 · 背部\n\n| 阶段 | 内容 |\n|------|------|\n| 🔥 热身 | 高抬腿 |\n| 💪 训练 | 引体向上、杠铃划船、高位下拉、坐姿划船 |\n| 🧘 拉伸 | 手臂环绕 |\n\n### 星期三 · 休息日\n\n> 休息，可做30分钟低强度有氧（散步/快走）\n\n### 星期四 · 腿部\n...（以此类推，每天用相同格式，拉伸动作也必须从动作库选）\n\n{userInfo}\n{exerciseCatalog}\n";
+    private static final String DIET_PLAN_GEN_PROMPT = "你是健身助手Tatan，请根据用户信息和食物营养参考生成饮食推荐。\n\n规则：\n1. 优先从下方【食物营养参考】里选食物；带[我的食物]标记的是用户自己上传的，优先考虑选用，但也兼顾多样性\n1.5. 严格遵守用户饮食约束：如果用户画像/偏好中明确说明不会烹饪、只能吃即食/外卖等，严禁推荐需要复杂烹饪的食物；食物库中不符合约束的视为不可用\n2. 先判断用户要的是全天饮食还是某一餐\n{mealRequestInstruction}\n3. 每种食物必须标注具体克数（如“鸡胸肉150g”），克数根据用户目标热量合理分配\n4. 根据用户的目标热量和三大宏量比例（蛋白质30%、碳水40%、脂肪30%）计算每餐用量。\n【关键】营养素计算公式：实际营养素(g) = 推荐克数 ÷ 食物基准克数 × 营养参考表中该营养素值。\n例：鸡胸肉基准100g含蛋白质31g，推荐150g则蛋白质=150÷100×31=46.5g。\n严禁把食物克数直接当作营养素克数！必须按公式换算后再累加。\n4.5. 【营养精度校验】输出前必须自检：把每餐每种食物的碳水量逐一累加，确保碳水总摄入量等于目标碳水总量（目标热量×40%÷4kcal/g）。如果总和不等于目标量，必须调整食物克数直到一致。蛋白质和脂肪同理校验。\n5. 每餐用 Markdown 表格展示\n6. 必须使用 Markdown 表格格式输出，严格按下方示例格式\n7. 严禁输出“注：”“说明：”“建议：”“可替换”“可调整”“如果没有”之类附加文字\n8. 除表格和标题及汇总外，不要输出任何其他段落\n\n输出格式（严格遵循）：\n\n### 一日食谱推荐\n\n| 餐次 | 推荐食物 |\n|------|----------|\n| 🌅 早餐 | 即食鸡胸肉100g + 水煮蛋2个(约100g) + 无糖豆浆300ml |\n| 🌞 午餐 | 去皮鸡腿150g + 糙米饭150g + 清炒西兰花200g |\n| 🌙 晚餐 | 三文鱼120g + 红薯200g + 蒜蓉菠菜200g |\n| 🍌 加餐 | 牛奶250ml + 香蕉1根(约120g) |\n\n### 今日营养估算\n\n| 营养素 | 摄入量 | 目标量 | 评价 |\n|--------|--------|--------|------|\n| 热量 | 约1850kcal | 2000kcal | 合理 |\n| 蛋白质 | 约110g | 150g | 偏低，建议加餐补充 |\n| 碳水化合物 | 约220g | 200g | 合理 |\n| 脂肪 | 约55g | 67g | 合理 |\n\n【食物营养参考】\n{foodKnowledge}\n\n{userInfo}\n";
+    private static final String REPORT_TRAINING_ISSUE_PROMPT = "你是健身助手Tatan。用户在训练中遇到了身体不适或困难，需要你分析问题并生成改进后的训练计划。\n\n分析要求：\n1. 结合用户伤病历史，判断反馈的动作是否适合该用户\n2. 检查当前计划中该动作的重量/组数是否合理（对比训练水平）\n3. 如果有伤病，推荐替代动作（从动作库中选择）\n\n输出格式：\n第一部分：2-4句话的分析，说明问题原因和改进方向（纯文本，不用markdown）\n第二部分：完整的改进后7天训练计划（必须用以下标准markdown格式）\n\n### 星期一 · 肌群\n热身：开合跳3组15个\n正式训练：动作名（X组，X次）、动作名（X组，X次）\n拉伸：动作名1分钟\n\n### 星期二 · 休息\n\n（以此类推覆盖7天，休息日也要写明\"休息\"，拉伸动作必须从动作库选）\n\n注意：\n- 必须使用标准markdown格式，### 标题格式为\"### 星期X · 肌群\"\n- 动作名称必须从下方动作库中选，不要自己编造\n- 训练计划部分前面不要输出任何额外说明文字\n";
+    private static final String REPORT_DIET_ISSUE_PROMPT = "你是健身助手Tatan。用户反馈饮食不足或饥饿，需要你分析热量摄入情况并生成改进后的饮食计划。\n\n分析要求：\n1. 计算热量缺口：用户目标热量 vs 近期实际摄入\n2. 检查宏量营养素是否合理（蛋白质是否充足、碳水是否太低）\n3. 结合训练消耗判断是否需要额外补充\n\n输出格式：\n第一部分：2-4句话的分析，说明热量缺口和营养素问题（纯文本，不用markdown）\n第二部分：改进后的全天饮食计划（必须用以下标准markdown表格格式）\n\n### 改进食谱推荐\n\n| 餐次 | 推荐食物 |\n|------|----------|\n| 早餐 | 食物A 150g + 食物B 200g |\n| 午餐 | 食物C 150g + 食物D 100g |\n| 晚餐 | 食物E 120g + 食物F 200g |\n| 加餐 | 食物G 250ml |\n\n注意：\n- 每种食物必须标注具体克数\n- 食物名称必须从下方食物营养参考中选\n- 饮食计划表格前面不要输出任何额外说明文字\n";
+    private static final String GENERAL_SYSTEM_PROMPT = "你是健身助手Tatan，风格简洁亲切。\n\n回复规则：\n1. 健身专业问题（训练、饮食、营养、减脂、增肌、伤病、康复、补剂、器械等）\n   → 依据上下文中【知识库检索结果】回答；如果没有知识库结果，只能回复：知识库暂无该知识，我无法回答\n\n2. 日常闲聊、问候、情感倾诉、通用话题（天气、心情、电影、自我介绍等）\n   → 像朋友一样自由回答，风格轻松，≤100字\n\n3. 非健身的专业请求（写代码、翻译、做题、写作等）\n   → 回复：我主要擅长健身方面的问题，关于[用户提到的领域]建议咨询专业工具哦。有健身问题随时问我~\n\n情绪感知规则：\n- 如果上下文中用户情绪状态为\"低落\"，回复时主动关心和鼓励，语气温暖，适当提出放松建议\n- 如果用户情绪状态为\"积极\"，给予肯定和激励，语气热情\n- 如果没有情绪标注，正常回复即可\n\n回复格式：\n- 纯文本，不用markdown\n- 第一行用 emoji 开头\n";
+    private static final String GENERAL_SYSTEM_PROMPT_WITH_KNOWLEDGE = "你是健身助手Tatan，风格简洁亲切。上下文中已提供【知识库检索结果】，请依据它回答健身专业问题。\n\n回复规则：\n1. 健身专业问题 → 依据【知识库检索结果】回答，优先使用知识库内容\n2. 日常闲聊 → 像朋友一样自由回答，风格轻松，≤100字\n3. 非健身专业请求 → 回复：我主要擅长健身方面的问题，建议咨询专业工具哦\n\n情绪感知规则：\n- 用户情绪\"低落\"→主动关心鼓励，语气温暖\n- 用户情绪\"积极\"→给予肯定激励，语气热情\n- 没有情绪标注 → 正常回复\n\n回复格式：纯文本，不用markdown，第一行用emoji开头\n";
+    private static final String RAG_SYSTEM_PROMPT = "你是健身助手Tatan。你现在处于严格 RAG 回答模式，只能依据下方【知识库检索结果】回答。\n\n【硬性规则】\n1. 先判断知识库条目是否能直接回答用户当前问题。\n2. “直接相关”必须满足：知识条目里的主题、动作/食物/营养/训练目标/伤病场景，与用户核心问题一致，并且能支持主要结论。\n3. 只是同属健身领域、只提到相近肌群、只出现泛泛训练原则，都不算直接相关。\n4. 如果没有直接相关知识条，或检索结果明显跑题，必须只回复：知识库暂无该知识，我无法回答\n5. 如果知识条直接相关，只能使用知识库中的内容回答；严禁补充常识、经验、推测、外部知识或自创建议。\n6. 如果知识条只覆盖了部分问题，只回答覆盖到的部分，并说明“知识库只覆盖到以上内容”。\n7. 不要因为用户画像、今日记录、历史上下文而扩展知识库没有提供的专业结论。\n8. 纯文本，不用 markdown，不输出判断过程。\n\n【相关性示例】\n- 用户问“胸肌训练怎么做”，知识库有“胸部训练原则” → 直接相关，可以回答。\n- 用户问“筋膜枪有用吗”，知识库只有“手臂训练原则”“胸部训练原则” → 不直接相关，只回复固定暂无内容。\n- 用户问“蛋白质怎么补”，知识库有“增肌期蛋白质摄入量” → 直接相关，可以回答。\n- 用户问“膝盖痛能不能深蹲”，知识库只有“腿部训练动作列表” → 不直接相关，只回复固定暂无内容。\n\n【知识相关时的回复格式】\n- 第一句直接回答结论。\n- 后面用 2-4 点说明知识库支持的依据。\n- 最后一行可以给 1 条实用建议，但必须来自知识库内容。\n- 总字数不超过 260 字。\n\n【知识库检索结果】\n{knowledge}\n";
+    private static final String FOOD_IDENTIFY_PROMPT = "你是食物识别助手。识别图片中的食物并预估分量。\n严格只返回一行 JSON，不要 markdown、不要解释、不要代码块。\n格式：{\"name\":\"食物名\",\"nameEn\":\"English name\",\"grams\":预估克数}\n规则：\n1. name：只写中文食物名称，多种食物用顿号分隔，如\"鸡胸肉、西兰花、米饭\"\n2. nameEn：对应英文名称，多种食物用逗号分隔，如\"chicken breast, broccoli, cooked rice\"。如果是营养标签图片无法判断英文，填 null\n3. grams 只填一个纯数字（整数），代表图片中食物的总克数，禁止填写任何文字说明。\n   严格根据图片中食物的视觉大小判断，禁止随意编造数值。\n   请对照常见实物参考：\n   - 一个普通汉堡约200g\n   - 一碗米饭约150g、一盘米饭约250g\n   - 一个鸡蛋约50g\n   - 一块鸡胸肉约150g\n   - 一块牛排约200g\n   - 一份沙拉约150g\n   - 一个苹果约200g、一根香蕉约120g\n   - 一杯牛奶约250ml\n   - 一个馒头约100g、一碗面条约250g\n   - 一块披萨(标准切片)约100g\n   - 仅供参考，必须根据图片中食物的实际大小比例进行调整\n4. 如果图片中无法判断分量大小，grams 填 null\n5. 如果图片是营养成分表标签，从标签上读取食物名称，grams 填 null\n";
 
     /*
      * WARNING - Removed try catching itself - possible behaviour change.
@@ -240,7 +240,7 @@ implements ChatService {
             this.securityCheck(message);
             String quickReply = this.quickMatch(message);
             if (quickReply != null) {
-                log.info("\u3010\u6d41\u7a0b\u3011quickMatch\u547d\u4e2d, \u8017\u65f6{}ms", (Object)(System.currentTimeMillis() - t0));
+                log.info("【流程】quickMatch命中, 耗时{}ms", (Object)(System.currentTimeMillis() - t0));
                 this.writeSseDataGradually(outputStream, quickReply);
                 resultHolder.append(quickReply);
                 return;
@@ -252,11 +252,11 @@ implements ChatService {
             ChatHistory history = this.getChatHistory(userId);
             UserRecord userRecord = this.userRecordService.getByUserId(userId);
             long t1 = System.currentTimeMillis();
-            log.info("\u3010\u6d41\u7a0b\u3011\u521d\u59cb\u5316\u5b8c\u6210(DB+Redis), \u8017\u65f6{}ms", (Object)(t1 - t0));
+            log.info("【流程】初始化完成(DB+Redis), 耗时{}ms", (Object)(t1 - t0));
             CompletableFuture<String> purificationFuture = this.profileExtractionService.purifyDirtyText(userId);
             DirectRouteResult direct = this.directRoute(message, userId, user, userRecord);
             if (direct != null) {
-                log.info("\u3010\u6d41\u7a0b\u3011directRoute\u547d\u4e2d, \u8017\u65f6{}ms", (Object)(System.currentTimeMillis() - t0));
+                log.info("【流程】directRoute命中, 耗时{}ms", (Object)(System.currentTimeMillis() - t0));
                 String summarized = this.streamSummarizeWithToolData(userId, user, message, direct.toolData(), direct.systemPrompt(), outputStream, resultHolder);
                 if (replyTypeHolder != null) {
                     replyTypeHolder.set(direct.replyType());
@@ -274,7 +274,7 @@ implements ChatService {
                 // empty catch block
             }
             try {
-                this.writeSseStatus(outputStream, "\u6b63\u5728\u5206\u6790\u610f\u56fe...");
+                this.writeSseStatus(outputStream, "正在分析意图...");
             }
             catch (Exception exception) {
                 // empty catch block
@@ -282,12 +282,12 @@ implements ChatService {
             long t2 = System.currentTimeMillis();
             ClassifyResult classifyResult = this.classifyAndAudit(userId, message, user, history, pendingContext, userProfile);
             long t3 = System.currentTimeMillis();
-            log.info("\u3010\u6d41\u7a0b\u3011classifyAndAudit\u8017\u65f6{}ms, \u7ed3\u679c={}", (Object)(t3 - t2), (Object)classifyResult);
+            log.info("【流程】classifyAndAudit耗时{}ms, 结果={}", (Object)(t3 - t2), (Object)classifyResult);
             if (classifyResult == null) {
                 String fullResponse2;
-                log.warn("\u3010\u6d41\u7a0b\u3011classifyAndAudit\u8fd4\u56denull, \u8d70\u95f2\u804a\u515c\u5e95");
+                log.warn("【流程】classifyAndAudit返回null, 走闲聊兜底");
                 try {
-                    this.writeSseStatus(outputStream, "\u6b63\u5728\u56de\u590d...");
+                    this.writeSseStatus(outputStream, "正在回复...");
                 }
                 catch (Exception exception) {
                     // empty catch block
@@ -307,7 +307,7 @@ implements ChatService {
             boolean complete = classifyResult.complete();
             String clarify = classifyResult.clarify();
             if (!complete && clarify != null && !clarify.isBlank()) {
-                log.info("\u3010\u6d41\u7a0b\u3011\u8ffd\u95ee\u5206\u652f: intent={}, clarify={}", (Object)intent, (Object)clarify);
+                log.info("【流程】追问分支: intent={}, clarify={}", (Object)intent, (Object)clarify);
                 this.writeSseDataGradually(outputStream, clarify);
                 resultHolder.append(clarify);
                 this.savePendingIntent(userId, intent, params, clarify);
@@ -319,9 +319,9 @@ implements ChatService {
             this.clearPendingIntent(userId);
             if ("other".equals(intent)) {
                 String fullResponse3;
-                log.info("\u3010\u6d41\u7a0b\u3011\u95f2\u804a\u5206\u652f(other), \u8017\u65f6{}ms", (Object)(System.currentTimeMillis() - t0));
+                log.info("【流程】闲聊分支(other), 耗时{}ms", (Object)(System.currentTimeMillis() - t0));
                 try {
-                    this.writeSseStatus(outputStream, "\u6b63\u5728\u56de\u590d...");
+                    this.writeSseStatus(outputStream, "正在回复...");
                 }
                 catch (Exception exception) {
                     // empty catch block
@@ -339,13 +339,13 @@ implements ChatService {
             long t4 = System.currentTimeMillis();
             params = this.auditCheck(intent, params, message, user);
             long t5 = System.currentTimeMillis();
-            log.info("\u3010\u6d41\u7a0b\u3011auditCheck\u8017\u65f6{}ms", (Object)(t5 - t4));
+            log.info("【流程】auditCheck耗时{}ms", (Object)(t5 - t4));
             params = this.autoFillFromDB(intent, params, userId);
             String purifiedText = this.profileExtractionService.getPurifiedText(userId);
             this.outputStreamLocal.set(outputStream);
             this.resultHolderLocal.set(resultHolder);
             try {
-                String statusHint = intent.startsWith("generate_") ? "\u6b63\u5728\u751f\u6210\u8ba1\u5212..." : (intent.startsWith("query_") || intent.startsWith("get_") || intent.equals("search_knowledge") ? "\u6b63\u5728\u67e5\u8be2\u6570\u636e..." : "\u6b63\u5728\u5904\u7406...");
+                String statusHint = intent.startsWith("generate_") ? "正在生成计划..." : (intent.startsWith("query_") || intent.startsWith("get_") || intent.equals("search_knowledge") ? "正在查询数据..." : "正在处理...");
                 try {
                     this.writeSseStatus(outputStream, statusHint);
                 }
@@ -355,7 +355,7 @@ implements ChatService {
                 long t6 = System.currentTimeMillis();
                 ToolCallResult result = this.dispatchIntent(userId, message, user, history, userRecord, purifiedText, outputStream, resultHolder, intent, params);
                 long t7 = System.currentTimeMillis();
-                log.info("\u3010\u6d41\u7a0b\u3011dispatchIntent({})\u8017\u65f6{}ms, result={}", new Object[]{intent, t7 - t6, result});
+                log.info("【流程】dispatchIntent({})耗时{}ms, result={}", new Object[]{intent, t7 - t6, result});
                 if (result != null) {
                     String fullResponse4;
                     if (replyTypeHolder != null) {
@@ -364,7 +364,7 @@ implements ChatService {
                     if (!(fullResponse4 = resultHolder.toString()).isBlank()) {
                         this.saveOrUpdateChatHistory(userId, message, fullResponse4);
                     }
-                    log.info("\u3010\u6d41\u7a0b\u3011\u603b\u8017\u65f6{}ms, replyType={}", (Object)(System.currentTimeMillis() - t0), (Object)result.replyType());
+                    log.info("【流程】总耗时{}ms, replyType={}", (Object)(System.currentTimeMillis() - t0), (Object)result.replyType());
                     return;
                 }
             }
@@ -372,9 +372,9 @@ implements ChatService {
                 this.outputStreamLocal.remove();
                 this.resultHolderLocal.remove();
             }
-            log.warn("\u3010\u6d41\u7a0b\u3011dispatchIntent\u8fd4\u56denull, \u8d70\u95f2\u804a\u515c\u5e95, intent={}", (Object)intent);
+            log.warn("【流程】dispatchIntent返回null, 走闲聊兜底, intent={}", (Object)intent);
             try {
-                this.writeSseStatus(outputStream, "\u6b63\u5728\u56de\u590d...");
+                this.writeSseStatus(outputStream, "正在回复...");
             }
             catch (Exception statusHint) {
                 // empty catch block
@@ -386,12 +386,12 @@ implements ChatService {
             if (!(fullResponse = resultHolder.toString()).isBlank()) {
                 this.saveOrUpdateChatHistory(userId, message, fullResponse);
             }
-            log.info("\u3010\u6d41\u7a0b\u3011\u603b\u8017\u65f6{}ms, replyType=general_chat(fallback)", (Object)(System.currentTimeMillis() - t0));
+            log.info("【流程】总耗时{}ms, replyType=general_chat(fallback)", (Object)(System.currentTimeMillis() - t0));
         }
         catch (Exception e) {
-            log.error("SSE\u6d41\u5f0f\u5bf9\u8bdd\u5f02\u5e38", (Throwable)e);
+            log.error("SSE流式对话异常", (Throwable)e);
             try {
-                this.writeSseDataGradually(outputStream, "\u4e0d\u597d\u610f\u601d\uff0cAI \u8c03\u7528\u5931\u8d25\uff0c\u8bf7\u8054\u7cfb\u5de5\u4f5c\u4eba\u5458\u6216\u7a0d\u7b49\u7247\u523b\u518d\u8bd5\u3002");
+                this.writeSseDataGradually(outputStream, "不好意思，AI 调用失败，请联系工作人员或稍等片刻再试。");
             }
             catch (Exception exception) {
                 // empty catch block
@@ -406,7 +406,7 @@ implements ChatService {
     }
 
     private ToolCallResult dispatchIntent(Long userId, String message, User user, ChatHistory history, UserRecord userRecord, String purifiedText, OutputStream outputStream, StringBuilder resultHolder, String intent, Map<String, Object> params) {
-        log.info("\u3010\u610f\u56fe\u5206\u53d1\u3011userId={}, intent={}", (Object)userId, (Object)intent);
+        log.info("【意图分发】userId={}, intent={}", (Object)userId, (Object)intent);
         return switch (intent) {
             case "save_diet" -> this.handleSaveDietIntent(userId, userRecord, params);
             case "save_exercise" -> this.handleSaveExerciseIntent(userId, userRecord, params);
@@ -429,7 +429,7 @@ implements ChatService {
             case "report_diet_issue" -> this.handleReportDietIssueIntent(userId, message, user, history, userRecord, outputStream, resultHolder, params);
             case "update_location" -> this.handleUpdateLocationIntent(userId, params);
             default -> {
-                log.warn("\u3010\u610f\u56fe\u5206\u53d1\u3011\u672a\u77e5intent: {}", (Object)intent);
+                log.warn("【意图分发】未知intent: {}", (Object)intent);
                 yield null;
             }
         };
@@ -485,29 +485,29 @@ implements ChatService {
 
     private String quickMatch(String message) {
         String msg = message.toLowerCase();
-        if (msg.length() <= 6 && Pattern.compile(".*(\u4f60\u597d|hi|hello|\u55e8|hey|\u5728\u5417).*").matcher(msg).matches()) {
-            return "\u4f60\u597d\uff01\u6211\u662f\u4f60\u7684\u667a\u80fd\u5065\u8eab\u52a9\u624b Tatan\uff0c\u6709\u4ec0\u4e48\u53ef\u4ee5\u5e2e\u4f60\u7684\u5417\uff1f";
+        if (msg.length() <= 6 && Pattern.compile(".*(你好|hi|hello|嗨|hey|在吗).*").matcher(msg).matches()) {
+            return "你好！我是你的智能健身助手 Tatan，有什么可以帮你的吗？";
         }
-        if (Pattern.compile(".*(\u4f60\u662f\u8c01|\u4f60\u53eb\u4ec0\u4e48|\u4ecb\u7ecd.*\u81ea\u5df1|\u4f60\u80fd\u505a\u4ec0\u4e48).*").matcher(msg).matches()) {
-            return "\u6211\u662f Tatan \u667a\u80fd\u5065\u8eab\u52a9\u624b\uff0c\u53ef\u4ee5\u5e2e\u4f60\uff1a\n1. \u56de\u7b54\u5065\u8eab\u76f8\u5173\u95ee\u9898\n2. \u5236\u5b9a\u4e2a\u6027\u5316\u8bad\u7ec3\u8ba1\u5212\n3. \u63d0\u4f9b\u996e\u98df\u5efa\u8bae\n4. \u804a\u804a\u5065\u8eab\u5fc3\u5f97\uff0c\u7ed9\u4f60\u6253\u6c14\u52a0\u6cb9\uff01";
+        if (Pattern.compile(".*(你是谁|你叫什么|介绍.*自己|你能做什么).*").matcher(msg).matches()) {
+            return "我是 Tatan 智能健身助手，可以帮你：\n1. 回答健身相关问题\n2. 制定个性化训练计划\n3. 提供饮食建议\n4. 聊聊健身心得，给你打气加油！";
         }
-        if (msg.length() <= 6 && Pattern.compile(".*(\u8c22\u8c22|\u611f\u8c22|\u591a\u8c22|thanks).*").matcher(msg).matches()) {
-            return "\u4e0d\u5ba2\u6c14\uff01\u6709\u4efb\u4f55\u5065\u8eab\u95ee\u9898\u968f\u65f6\u95ee\u6211\uff0c\u6211\u4f1a\u4e00\u76f4\u5728\u8fd9\u91cc\u966a\u4f60\u3002";
+        if (msg.length() <= 6 && Pattern.compile(".*(谢谢|感谢|多谢|thanks).*").matcher(msg).matches()) {
+            return "不客气！有任何健身问题随时问我，我会一直在这里陪你。";
         }
         return null;
     }
 
     private DirectRouteResult directRoute(String message, Long userId, User user, UserRecord userRecord) {
         String msg = message.toLowerCase();
-        if (msg.equals("\u4eca\u5929\u505a\u4e86\u4ec0\u4e48") || msg.equals("\u4eca\u5929\u8bb0\u5f55\u4e86\u4ec0\u4e48") || msg.equals("\u6253\u5361\u603b\u7ed3")) {
+        if (msg.equals("今天做了什么") || msg.equals("今天记录了什么") || msg.equals("打卡总结")) {
             String data = this.buildTodayRecordReply(user, userRecord);
-            String toolData = data != null && !data.isBlank() ? data : "\u6682\u65e0\u8bb0\u5f55";
-            return new DirectRouteResult("today_exercise_record", toolData, "\u4f60\u662f\u5065\u8eab\u52a9\u624bTatan\u3002\u6839\u636e\u4e0b\u65b9\u5de5\u5177\u8fd4\u56de\u7684\u4eca\u65e5\u8bb0\u5f55\u6570\u636e\uff0c\u7b80\u6d01\u4eb2\u5207\u5730\u56de\u7b54\u7528\u6237\u3002\u7eaf\u6587\u672c\uff0c\u4e0d\u7528markdown\u3002\u5fc5\u987b\u5b8c\u6574\u5448\u73b0\u6240\u6709\u8bad\u7ec3\u548c\u996e\u98df\u6570\u636e\uff0c\u4e0d\u80fd\u7701\u7565\u4efb\u4f55\u8bb0\u5f55\u3002");
+            String toolData = data != null && !data.isBlank() ? data : "暂无记录";
+            return new DirectRouteResult("today_exercise_record", toolData, "你是健身助手Tatan。根据下方工具返回的今日记录数据，简洁亲切地回答用户。纯文本，不用markdown。必须完整呈现所有训练和饮食数据，不能省略任何记录。");
         }
-        if (msg.equals("\u8fd9\u5468\u505a\u4e86\u4ec0\u4e48") || msg.equals("\u672c\u5468\u603b\u7ed3") || msg.equals("\u8fd9\u5468\u603b\u7ed3")) {
+        if (msg.equals("这周做了什么") || msg.equals("本周总结") || msg.equals("这周总结")) {
             String data = this.buildWeekRecordReply(user, userRecord);
-            String toolData = data != null && !data.isBlank() ? data : "\u6682\u65e0\u8bb0\u5f55";
-            return new DirectRouteResult("general_chat", toolData, "\u4f60\u662f\u5065\u8eab\u52a9\u624bTatan\u3002\u6839\u636e\u4e0b\u65b9\u5de5\u5177\u8fd4\u56de\u7684\u672c\u5468\u8bb0\u5f55\u6570\u636e\uff0c\u7b80\u6d01\u4eb2\u5207\u5730\u56de\u7b54\u7528\u6237\u3002\u7eaf\u6587\u672c\uff0c\u4e0d\u7528markdown\u3002\u5fc5\u987b\u5b8c\u6574\u5448\u73b0\u6240\u6709\u6570\u636e\uff0c\u4e0d\u80fd\u7701\u7565\u4efb\u4f55\u4e00\u5929\u7684\u8bb0\u5f55\u3002");
+            String toolData = data != null && !data.isBlank() ? data : "暂无记录";
+            return new DirectRouteResult("general_chat", toolData, "你是健身助手Tatan。根据下方工具返回的本周记录数据，简洁亲切地回答用户。纯文本，不用markdown。必须完整呈现所有数据，不能省略任何一天的记录。");
         }
         return null;
     }
@@ -515,14 +515,14 @@ implements ChatService {
     private String streamSummarizeWithToolData(Long userId, User user, String userMessage, String toolData, String systemPrompt, OutputStream outputStream, StringBuilder resultHolder) {
         try {
             AiModelConfig.ModelProvider provider = this.requireProvider(this.resolvePurificationModel(user));
-            String userContent = "\u7528\u6237\u95ee\uff1a" + userMessage + "\n\n\u5de5\u5177\u8fd4\u56de\u6570\u636e\uff1a\n" + toolData;
+            String userContent = "用户问：" + userMessage + "\n\n工具返回数据：\n" + toolData;
             String summarized = this.callAiApiStreamWithProvider(systemPrompt, userContent, outputStream, provider, 1024);
             resultHolder.append(summarized);
             return summarized;
         }
         catch (Exception e) {
-            log.error("streamSummarizeWithToolData\u5f02\u5e38", (Throwable)e);
-            String fallback = "\u6570\u636e\u83b7\u53d6\u6210\u529f\uff0c\u4f46AI\u603b\u7ed3\u5931\u8d25\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5\u3002";
+            log.error("streamSummarizeWithToolData异常", (Throwable)e);
+            String fallback = "数据获取成功，但AI总结失败，请稍后重试。";
             try {
                 this.writeSseDataGradually(outputStream, fallback);
             }
@@ -547,13 +547,13 @@ implements ChatService {
             boolean hasSummary = summary != null && !summary.isBlank();
             boolean bl = hasRecentMessages = recentMessages != null && !recentMessages.isEmpty();
             if (hasSummary || hasRecentMessages) {
-                userMsg.append("\u3010\u5bf9\u8bdd\u5386\u53f2\u3011\n");
+                userMsg.append("【对话历史】\n");
                 if (hasSummary) {
-                    userMsg.append("\u957f\u671f\u6458\u8981\uff1a\n").append(summary.trim()).append("\n\n");
+                    userMsg.append("长期摘要：\n").append(summary.trim()).append("\n\n");
                 }
                 if (hasRecentMessages) {
                     int start = Math.max(0, recentMessages.size() - 10);
-                    userMsg.append("\u6700\u8fd1\u5bf9\u8bdd\uff08\u6700\u591a5\u8f6e\uff09\uff1a\n");
+                    userMsg.append("最近对话（最多5轮）：\n");
                     for (int i = start; i < recentMessages.size(); ++i) {
                         String item = recentMessages.get(i);
                         if (item == null || item.isBlank()) continue;
@@ -563,12 +563,12 @@ implements ChatService {
                 }
             }
             if (pendingContext != null && !pendingContext.isBlank()) {
-                userMsg.append("\u3010\u5f85\u8865\u5168\u4fe1\u606f\u3011\u4e0a\u6b21\u8ffd\u95ee\u4e86\uff1a\n").append(pendingContext).append("\n");
+                userMsg.append("【待补全信息】上次追问了：\n").append(pendingContext).append("\n");
             }
             if (userProfile != null && userProfile.getUserProfileText() != null && !userProfile.getUserProfileText().isBlank()) {
-                userMsg.append("\u3010\u7528\u6237\u753b\u50cf\u6458\u8981\u3011\n").append(userProfile.getUserProfileText()).append("\n");
+                userMsg.append("【用户画像摘要】\n").append(userProfile.getUserProfileText()).append("\n");
             }
-            userMsg.append("\u3010\u7528\u6237\u6700\u65b0\u6d88\u606f\u3011\n").append(message);
+            userMsg.append("【用户最新消息】\n").append(message);
             HashMap<String, Object> requestBody = new HashMap<String, Object>();
             requestBody.put("model", provider.getModel());
             requestBody.put("max_tokens", 1024);
@@ -580,22 +580,22 @@ implements ChatService {
             requestBody.put("messages", List.of(Map.of("role", "system", "content", INTENT_CLASSIFY_PROMPT), Map.of("role", "user", "content", userMsg.toString())));
             Map response = (Map)((WebClient.RequestBodySpec)webClient.post().uri("/chat/completions", new Object[0])).bodyValue(requestBody).retrieve().bodyToMono(Map.class).block();
             if (response == null) {
-                log.warn("\u3010\u5206\u7c7b+\u5ba1\u8ba1\u3011API\u8fd4\u56denull");
+                log.warn("【分类+审计】API返回null");
                 return null;
             }
             List choices = (List)response.get("choices");
             if (choices == null || choices.isEmpty()) {
-                log.warn("\u3010\u5206\u7c7b+\u5ba1\u8ba1\u3011choices\u4e3a\u7a7a, response={}", (Object)response);
+                log.warn("【分类+审计】choices为空, response={}", (Object)response);
                 return null;
             }
             Map msg = (Map)((Map)choices.get(0)).get("message");
             String string = content = msg != null ? (String)msg.get("content") : null;
             if (content == null || content.isBlank()) {
-                log.warn("\u3010\u5206\u7c7b+\u5ba1\u8ba1\u3011content\u4e3a\u7a7a, msg={}", (Object)msg);
+                log.warn("【分类+审计】content为空, msg={}", (Object)msg);
                 return null;
             }
             String json = content.trim();
-            log.info("\u3010\u5206\u7c7b+\u5ba1\u8ba1\u3011AI\u539f\u59cb\u8fd4\u56de: {}", (Object)json);
+            log.info("【分类+审计】AI原始返回: {}", (Object)json);
             if (json.startsWith("```")) {
                 json = json.replaceAll("^```(?:json)?\\s*", "").replaceAll("\\s*```$", "");
             }
@@ -603,7 +603,7 @@ implements ChatService {
                 intentMap = (Map)JSON_MAPPER.readValue(json, Map.class);
             }
             catch (Exception e) {
-                log.warn("\u3010\u5206\u7c7b+\u5ba1\u8ba1\u3011JSON\u89e3\u6790\u5931\u8d25: {}", (Object)json);
+                log.warn("【分类+审计】JSON解析失败: {}", (Object)json);
                 return null;
             }
             String intent = this.toCleanString(intentMap.get("intent"));
@@ -616,11 +616,11 @@ implements ChatService {
             params.remove("intent");
             params.remove("complete");
             params.remove("clarify");
-            log.info("\u3010\u5206\u7c7b+\u5ba1\u8ba1\u3011userId={}, intent={}, complete={}, params={}", new Object[]{userId, intent, complete, params.keySet()});
+            log.info("【分类+审计】userId={}, intent={}, complete={}, params={}", new Object[]{userId, intent, complete, params.keySet()});
             return new ClassifyResult(intent, params, complete, clarify);
         }
         catch (Exception e) {
-            log.warn("\u3010\u5206\u7c7b+\u5ba1\u8ba1\u3011\u5f02\u5e38", (Throwable)e);
+            log.warn("【分类+审计】异常", (Throwable)e);
             return null;
         }
     }
@@ -630,23 +630,23 @@ implements ChatService {
             return params;
         }
         String extractableParams = switch (intent) {
-            case "save_diet" -> "food(\u5fc5\u586b), meal(\u53ef\u9009)";
-            case "save_exercise" -> "exercises(\u5fc5\u586b\u6570\u7ec4, \u6bcf\u9879\u542bname/sets/duration)";
-            case "save_weight" -> "weight_kg(\u5fc5\u586b), note(\u53ef\u9009)";
-            case "query_training" -> "query_type(\u5fc5\u586b), target_day(\u53ef\u9009)";
-            case "query_diet" -> "query_type(\u5fc5\u586b), meal_type(\u53ef\u9009)";
-            case "query_weight" -> "range(\u53ef\u9009)";
-            case "get_today_records", "get_week_records" -> "\u65e0\u53c2\u6570";
-            case "get_history_record" -> "date_description(\u5fc5\u586b)";
-            case "search_knowledge" -> "query(\u5fc5\u586b)";
-            case "generate_training_plan" -> "user_request(\u5fc5\u586b), fitness_goal(\u53ef\u9009), days_per_week(\u53ef\u9009), equipment(\u53ef\u9009), medical_history(\u53ef\u9009)";
-            case "generate_diet_plan" -> "user_request(\u5fc5\u586b), meal_scope(\u53ef\u9009)";
-            case "report_training_issue" -> "issue_description(\u5fc5\u586b), affected_exercise(\u53ef\u9009)";
-            case "report_diet_issue" -> "issue_description(\u5fc5\u586b), meal_context(\u53ef\u9009)";
-            case "update_location" -> "city(\u5fc5\u586b)";
-            case "delete_record" -> "type(\u5fc5\u586b), target(\u53ef\u9009)";
-            case "update_weight" -> "weight_kg(\u5fc5\u586b)";
-            default -> "\u65e0\u53c2\u6570";
+            case "save_diet" -> "food(必填), meal(可选)";
+            case "save_exercise" -> "exercises(必填数组, 每项含name/sets/duration)";
+            case "save_weight" -> "weight_kg(必填), note(可选)";
+            case "query_training" -> "query_type(必填), target_day(可选)";
+            case "query_diet" -> "query_type(必填), meal_type(可选)";
+            case "query_weight" -> "range(可选)";
+            case "get_today_records", "get_week_records" -> "无参数";
+            case "get_history_record" -> "date_description(必填)";
+            case "search_knowledge" -> "query(必填)";
+            case "generate_training_plan" -> "user_request(必填), fitness_goal(可选), days_per_week(可选), equipment(可选), medical_history(可选)";
+            case "generate_diet_plan" -> "user_request(必填), meal_scope(可选)";
+            case "report_training_issue" -> "issue_description(必填), affected_exercise(可选)";
+            case "report_diet_issue" -> "issue_description(必填), meal_context(可选)";
+            case "update_location" -> "city(必填)";
+            case "delete_record" -> "type(必填), target(可选)";
+            case "update_weight" -> "weight_kg(必填)";
+            default -> "无参数";
         };
         try {
             Map auditResult;
@@ -697,13 +697,13 @@ implements ChatService {
                     String key = entry.getKey();
                     if (params.containsKey(key)) continue;
                     params.put(key, entry.getValue());
-                    log.info("\u3010\u5ba1\u8ba1\u8865\u6f0f\u3011\u8865\u5165: {}={}", (Object)key, entry.getValue());
+                    log.info("【审计补漏】补入: {}={}", (Object)key, entry.getValue());
                 }
             }
             return params;
         }
         catch (Exception e) {
-            log.warn("\u3010\u5ba1\u8ba1\u68c0\u67e5\u3011\u5f02\u5e38\uff0c\u8fd4\u56de\u539fparams", (Throwable)e);
+            log.warn("【审计检查】异常，返回原params", (Throwable)e);
             return params;
         }
     }
@@ -772,10 +772,10 @@ implements ChatService {
             pending.put("clarify", clarify);
             String key = "chat:pending_intent:" + userId;
             this.stringRedisTemplate.opsForValue().set(key, JSON_MAPPER.writeValueAsString(pending), 5L, TimeUnit.MINUTES);
-            log.info("\u3010\u8ffd\u95ee\u4fdd\u5b58\u3011userId={}, intent={}", (Object)userId, (Object)intent);
+            log.info("【追问保存】userId={}, intent={}", (Object)userId, (Object)intent);
         }
         catch (Exception e) {
-            log.warn("\u3010\u8ffd\u95ee\u4fdd\u5b58\u3011Redis\u5199\u5165\u5931\u8d25", (Throwable)e);
+            log.warn("【追问保存】Redis写入失败", (Throwable)e);
         }
     }
 
@@ -801,7 +801,7 @@ implements ChatService {
             dietReq.setSource("chat");
             this.appendDietRecord(userId, userRecord, dietReq);
             String mealLabel = meal != null && !meal.isBlank() ? meal : this.getCurrentMealType();
-            String reply = "\u597d\u7684\uff0c\u5df2\u8bb0\u5f55" + mealLabel + "\uff1a" + food;
+            String reply = "好的，已记录" + mealLabel + "：" + food;
             String macroSummary = this.buildMacroSummaryText(userId, LocalDate.now(CN_ZONE));
             if (!macroSummary.isEmpty()) {
                 reply = reply + "\n" + macroSummary;
@@ -811,7 +811,7 @@ implements ChatService {
             return new ToolCallResult("today_diet_record", "");
         }
         catch (Exception e) {
-            log.error("handleSaveDietIntent\u5f02\u5e38", (Throwable)e);
+            log.error("handleSaveDietIntent异常", (Throwable)e);
             return null;
         }
     }
@@ -881,19 +881,19 @@ implements ChatService {
             if (items.isEmpty()) {
                 return null;
             }
-            String sessionName = String.join((CharSequence)"\u3001", names);
+            String sessionName = String.join((CharSequence)"、", names);
             this.exerciseRecordService.saveStructuredRecord(userId, today, recordTime, sessionName, totalDuration > 0 ? Integer.valueOf(totalDuration) : null, null, sessionName, "chat", items);
             int todayBurned = this.exerciseRecordService.getDayTotalCaloriesBurned(userId, today);
-            String reply = "\u597d\u7684\uff0c\u5df2\u8bb0\u5f55\u8fd0\u52a8\uff1a" + sessionName;
+            String reply = "好的，已记录运动：" + sessionName;
             if (todayBurned > 0) {
-                reply = reply + String.format("\uff08\u4eca\u65e5\u7d2f\u8ba1\u6d88\u8017\u7ea6%d\u5927\u5361\uff09", todayBurned);
+                reply = reply + String.format("（今日累计消耗约%d大卡）", todayBurned);
             }
             this.writeSseDataGradually(this.outputStreamLocal.get(), reply);
             this.resultHolderLocal.get().append(reply);
             return new ToolCallResult("today_exercise_record", "");
         }
         catch (Exception e) {
-            log.error("handleSaveExerciseIntent\u5f02\u5e38", (Throwable)e);
+            log.error("handleSaveExerciseIntent异常", (Throwable)e);
             return null;
         }
     }
@@ -913,7 +913,7 @@ implements ChatService {
                     weightKg = Double.parseDouble(String.valueOf(weightObj));
                 }
                 catch (Exception e) {
-                    log.warn("{}: \u65e0\u6cd5\u89e3\u6790weight_kg={}", (Object)(isUpdate ? "update_weight" : "save_weight"), weightObj);
+                    log.warn("{}: 无法解析weight_kg={}", (Object)(isUpdate ? "update_weight" : "save_weight"), weightObj);
                     return null;
                 }
             }
@@ -928,13 +928,13 @@ implements ChatService {
             }
             log.info("{}: userId={}, weight={}kg", new Object[]{isUpdate ? "update_weight" : "save_weight", userId, weightKg});
             String weightStr = weightKg % 1.0 == 0.0 ? String.valueOf((int)weightKg) : String.valueOf(weightKg);
-            String reply = isUpdate ? "\u597d\u7684\uff0c\u5df2\u4fee\u6b63\u4eca\u65e5\u4f53\u91cd\u4e3a\uff1a" + weightStr + "kg" : "\u597d\u7684\uff0c\u5df2\u8bb0\u5f55\u4eca\u65e5\u4f53\u91cd\uff1a" + weightStr + "kg";
+            String reply = isUpdate ? "好的，已修正今日体重为：" + weightStr + "kg" : "好的，已记录今日体重：" + weightStr + "kg";
             this.writeSseDataGradually(this.outputStreamLocal.get(), reply);
             this.resultHolderLocal.get().append(reply);
             return new ToolCallResult("general_chat", "");
         }
         catch (Exception e) {
-            log.error("{}\u5f02\u5e38", (Object)(isUpdate ? "handleUpdateWeightIntent" : "handleSaveWeightIntent"), (Object)e);
+            log.error("{}异常", (Object)(isUpdate ? "handleUpdateWeightIntent" : "handleSaveWeightIntent"), (Object)e);
             return null;
         }
     }
@@ -957,7 +957,7 @@ implements ChatService {
                 calories = Double.parseDouble(String.valueOf(calObj).trim());
             }
             if (calories < 500.0 || calories > 10000.0) {
-                String reply = "\u6bcf\u65e5\u70ed\u91cf\u76ee\u6807\u5e94\u5728 500~10000 kcal \u4e4b\u95f4\uff0c\u8bf7\u786e\u8ba4\u540e\u91cd\u65b0\u8bbe\u7f6e";
+                String reply = "每日热量目标应在 500~10000 kcal 之间，请确认后重新设置";
                 this.writeSseDataGradually(this.outputStreamLocal.get(), reply);
                 this.resultHolderLocal.get().append(reply);
                 return new ToolCallResult("general_chat", "");
@@ -970,16 +970,16 @@ implements ChatService {
             profile.setCustomDailyCalories(calories);
             this.userProfileService.saveOrUpdate(userId, profile);
             log.info("set_daily_calories: userId={}, calories={}", (Object)userId, (Object)calories);
-            Object reply = String.format("\u5df2\u5c06\u6bcf\u65e5\u6444\u5165\u70ed\u91cf\u76ee\u6807\u8bbe\u4e3a %.0fkcal", calories);
+            Object reply = String.format("已将每日摄入热量目标设为 %.0fkcal", calories);
             try {
                 User user = (User)this.userService.getById(userId);
                 if (user != null && user.getWeight() != null) {
-                    reply = (String)reply + String.format("\uff08\u5f53\u524d\u4f53\u91cd%.1fkg", user.getWeight());
+                    reply = (String)reply + String.format("（当前体重%.1fkg", user.getWeight());
                     if (profile.getTargetWeight() != null && profile.getTargetWeight() > 0.0) {
                         double diff = user.getWeight() - profile.getTargetWeight();
-                        reply = (String)reply + String.format("\uff0c\u8ddd\u76ee\u6807%.1fkg\u8fd8\u5dee%.1fkg", profile.getTargetWeight(), Math.abs(diff));
+                        reply = (String)reply + String.format("，距目标%.1fkg还差%.1fkg", profile.getTargetWeight(), Math.abs(diff));
                     }
-                    reply = (String)reply + "\uff09";
+                    reply = (String)reply + "）";
                 }
             }
             catch (Exception exception) {
@@ -990,7 +990,7 @@ implements ChatService {
             return new ToolCallResult("general_chat", "");
         }
         catch (Exception e) {
-            log.error("handleSetDailyCaloriesIntent\u5f02\u5e38", (Throwable)e);
+            log.error("handleSetDailyCaloriesIntent异常", (Throwable)e);
             return null;
         }
     }
@@ -1009,7 +1009,7 @@ implements ChatService {
                 targetWeight = Double.parseDouble(String.valueOf(wObj).trim());
             }
             if (targetWeight < 30.0 || targetWeight > 300.0) {
-                String reply = "\u76ee\u6807\u4f53\u91cd\u5e94\u5728 30~300 kg \u4e4b\u95f4\uff0c\u8bf7\u786e\u8ba4\u540e\u91cd\u65b0\u8bbe\u7f6e";
+                String reply = "目标体重应在 30~300 kg 之间，请确认后重新设置";
                 this.writeSseDataGradually(this.outputStreamLocal.get(), reply);
                 this.resultHolderLocal.get().append(reply);
                 return new ToolCallResult("general_chat", "");
@@ -1022,24 +1022,24 @@ implements ChatService {
             profile.setTargetWeight(targetWeight);
             this.userProfileService.saveOrUpdate(userId, profile);
             log.info("set_target_weight: userId={}, targetWeight={}", (Object)userId, (Object)targetWeight);
-            Object reply = String.format("\u5df2\u5c06\u76ee\u6807\u4f53\u91cd\u8bbe\u4e3a %.1fkg", targetWeight);
+            Object reply = String.format("已将目标体重设为 %.1fkg", targetWeight);
             try {
                 User user = (User)this.userService.getById(userId);
                 if (user != null && user.getWeight() != null) {
                     double diff = user.getWeight() - targetWeight;
-                    reply = Math.abs(diff) > 0.1 ? (String)reply + String.format("\uff0c\u5f53\u524d%.1fkg\uff0c%s%.1fkg", user.getWeight(), diff > 0.0 ? "\u8fd8\u9700\u51cf" : "\u8fd8\u9700\u589e", Math.abs(diff)) : (String)reply + "\uff0c\u5f53\u524d\u4f53\u91cd\u5df2\u63a5\u8fd1\u76ee\u6807\uff0c\u7ee7\u7eed\u4fdd\u6301\uff01";
+                    reply = Math.abs(diff) > 0.1 ? (String)reply + String.format("，当前%.1fkg，%s%.1fkg", user.getWeight(), diff > 0.0 ? "还需减" : "还需增", Math.abs(diff)) : (String)reply + "，当前体重已接近目标，继续保持！";
                 }
             }
             catch (Exception exception) {
                 // empty catch block
             }
-            reply = (String)reply + "\uff0c\u52a0\u6cb9\uff01";
+            reply = (String)reply + "，加油！";
             this.writeSseDataGradually(this.outputStreamLocal.get(), (String)reply);
             this.resultHolderLocal.get().append((String)reply);
             return new ToolCallResult("general_chat", "");
         }
         catch (Exception e) {
-            log.error("handleSetTargetWeightIntent\u5f02\u5e38", (Throwable)e);
+            log.error("handleSetTargetWeightIntent异常", (Throwable)e);
             return null;
         }
     }
@@ -1055,7 +1055,7 @@ implements ChatService {
             if (city.isBlank()) {
                 return null;
             }
-            if (city.endsWith("\u5e02")) {
+            if (city.endsWith("市")) {
                 city = city.substring(0, city.length() - 1);
             }
             if ((user = (User)this.userService.getById(userId)) == null) {
@@ -1065,13 +1065,13 @@ implements ChatService {
             user.setCityEn(CITY_EN_MAP.getOrDefault(city, ""));
             this.userService.updateById(user);
             log.info("update_location: userId={}, city={}, cityEn={}", new Object[]{userId, city, user.getCityEn()});
-            String reply = "\u597d\u7684\uff0c\u5df2\u66f4\u65b0\u4f60\u7684\u4f4d\u7f6e\u4e3a" + city + "\uff0c\u4ee5\u540e\u5929\u6c14\u63d0\u9192\u4f1a\u6309" + city + "\u7684\u5929\u6c14\u6765\u63a8\u9001\u3002";
+            String reply = "好的，已更新你的位置为" + city + "，以后天气提醒会按" + city + "的天气来推送。";
             this.writeSseDataGradually(this.outputStreamLocal.get(), reply);
             this.resultHolderLocal.get().append(reply);
             return new ToolCallResult("general_chat", "");
         }
         catch (Exception e) {
-            log.error("handleUpdateLocationIntent\u5f02\u5e38", (Throwable)e);
+            log.error("handleUpdateLocationIntent异常", (Throwable)e);
             return null;
         }
     }
@@ -1082,31 +1082,31 @@ implements ChatService {
             LocalDate today = LocalDate.now(CN_ZONE);
             LocalDate yesterday = today.minusDays(1L);
             StringBuilder context = new StringBuilder();
-            context.append("\u7528\u6237\u95ee\u9898\uff1a").append(this.toCleanString(params.get("issue_description")));
+            context.append("用户问题：").append(this.toCleanString(params.get("issue_description")));
             String affectedExercise = this.toCleanString(params.get("affected_exercise"));
             if (!affectedExercise.isBlank()) {
-                context.append("\uff0c\u6d89\u53ca\u52a8\u4f5c\uff1a").append(affectedExercise);
+                context.append("，涉及动作：").append(affectedExercise);
             }
             context.append("\n\n");
             context.append(this.buildUserInfo(user)).append("\n");
             String trainingPlan = this.buildTrainingPlanText(userId);
             if (trainingPlan != null && !trainingPlan.isBlank()) {
-                context.append("\u3010\u5f53\u524d\u8bad\u7ec3\u8ba1\u5212\u3011\n").append(trainingPlan).append("\n\n");
+                context.append("【当前训练计划】\n").append(trainingPlan).append("\n\n");
             }
             if ((dietPlan = this.buildDietPlanText(userId)) != null && !dietPlan.isBlank()) {
-                context.append("\u3010\u5f53\u524d\u996e\u98df\u8ba1\u5212\u3011\n").append(dietPlan).append("\n\n");
+                context.append("【当前饮食计划】\n").append(dietPlan).append("\n\n");
             }
             Map<String, Object> todayMacro = this.dietRecordService.getDayMacroSummary(userId, today);
             Map<String, Object> yesterdayMacro = this.dietRecordService.getDayMacroSummary(userId, yesterday);
-            context.append("\u3010\u8fd1\u671f\u996e\u98df\u6570\u636e\u3011\n");
-            context.append("\u4eca\u65e5\u6444\u5165\uff1a\u70ed\u91cf").append(todayMacro.get("calories")).append("kcal\uff0c\u86cb\u767d\u8d28").append(todayMacro.get("protein")).append("g\uff0c\u78b3\u6c34").append(todayMacro.get("carbs")).append("g\uff0c\u8102\u80aa").append(todayMacro.get("fat")).append("g\n");
-            context.append("\u6628\u65e5\u6444\u5165\uff1a\u70ed\u91cf").append(yesterdayMacro.get("calories")).append("kcal\uff0c\u86cb\u767d\u8d28").append(yesterdayMacro.get("protein")).append("g\uff0c\u78b3\u6c34").append(yesterdayMacro.get("carbs")).append("g\uff0c\u8102\u80aa").append(yesterdayMacro.get("fat")).append("g\n\n");
+            context.append("【近期饮食数据】\n");
+            context.append("今日摄入：热量").append(todayMacro.get("calories")).append("kcal，蛋白质").append(todayMacro.get("protein")).append("g，碳水").append(todayMacro.get("carbs")).append("g，脂肪").append(todayMacro.get("fat")).append("g\n");
+            context.append("昨日摄入：热量").append(yesterdayMacro.get("calories")).append("kcal，蛋白质").append(yesterdayMacro.get("protein")).append("g，碳水").append(yesterdayMacro.get("carbs")).append("g，脂肪").append(yesterdayMacro.get("fat")).append("g\n\n");
             int todayBurned = this.exerciseRecordService.getDayTotalCaloriesBurned(userId, today);
             int yesterdayBurned = this.exerciseRecordService.getDayTotalCaloriesBurned(userId, yesterday);
-            context.append("\u3010\u8fd1\u671f\u8bad\u7ec3\u6d88\u8017\u3011\n\u4eca\u65e5\uff1a").append(todayBurned).append("\u5927\u5361\uff0c\u6628\u65e5\uff1a").append(yesterdayBurned).append("\u5927\u5361\n\n");
+            context.append("【近期训练消耗】\n今日：").append(todayBurned).append("大卡，昨日：").append(yesterdayBurned).append("大卡\n\n");
             String exerciseCatalog = this.buildExerciseCatalog(userId, null);
-            context.append("\u3010\u52a8\u4f5c\u5e93\u3011\n").append(exerciseCatalog).append("\n\n");
-            context.append("\u7528\u6237\u7684\u5177\u4f53\u8981\u6c42\uff1a").append(message);
+            context.append("【动作库】\n").append(exerciseCatalog).append("\n\n");
+            context.append("用户的具体要求：").append(message);
             String aiReply = this.callAiApiStream(REPORT_TRAINING_ISSUE_PROMPT, context.toString(), outputStream, null, 1500);
             if (!this.isBlank(aiReply)) {
                 resultHolder.append(aiReply);
@@ -1114,7 +1114,7 @@ implements ChatService {
             return new ToolCallResult("training_plan", "training");
         }
         catch (Exception e) {
-            log.error("handleReportTrainingIssueIntent\u5f02\u5e38", (Throwable)e);
+            log.error("handleReportTrainingIssueIntent异常", (Throwable)e);
             return null;
         }
     }
@@ -1125,31 +1125,31 @@ implements ChatService {
             LocalDate today = LocalDate.now(CN_ZONE);
             LocalDate yesterday = today.minusDays(1L);
             StringBuilder context = new StringBuilder();
-            context.append("\u7528\u6237\u95ee\u9898\uff1a").append(this.toCleanString(params.get("issue_description")));
+            context.append("用户问题：").append(this.toCleanString(params.get("issue_description")));
             String mealContext = this.toCleanString(params.get("meal_context"));
             if (!mealContext.isBlank()) {
-                context.append("\uff0c\u76f8\u5173\u9910\u6b21\uff1a").append(mealContext);
+                context.append("，相关餐次：").append(mealContext);
             }
             context.append("\n\n");
             context.append(this.buildUserInfo(user)).append("\n");
             String trainingPlan = this.buildTrainingPlanText(userId);
             if (trainingPlan != null && !trainingPlan.isBlank()) {
-                context.append("\u3010\u5f53\u524d\u8bad\u7ec3\u8ba1\u5212\u3011\n").append(trainingPlan).append("\n\n");
+                context.append("【当前训练计划】\n").append(trainingPlan).append("\n\n");
             }
             if ((dietPlan = this.buildDietPlanText(userId)) != null && !dietPlan.isBlank()) {
-                context.append("\u3010\u5f53\u524d\u996e\u98df\u8ba1\u5212\u3011\n").append(dietPlan).append("\n\n");
+                context.append("【当前饮食计划】\n").append(dietPlan).append("\n\n");
             }
             Map<String, Object> todayMacro = this.dietRecordService.getDayMacroSummary(userId, today);
             Map<String, Object> yesterdayMacro = this.dietRecordService.getDayMacroSummary(userId, yesterday);
-            context.append("\u3010\u8fd1\u671f\u996e\u98df\u6570\u636e\u3011\n");
-            context.append("\u4eca\u65e5\u6444\u5165\uff1a\u70ed\u91cf").append(todayMacro.get("calories")).append("kcal\uff0c\u86cb\u767d\u8d28").append(todayMacro.get("protein")).append("g\uff0c\u78b3\u6c34").append(todayMacro.get("carbs")).append("g\uff0c\u8102\u80aa").append(todayMacro.get("fat")).append("g\n");
-            context.append("\u6628\u65e5\u6444\u5165\uff1a\u70ed\u91cf").append(yesterdayMacro.get("calories")).append("kcal\uff0c\u86cb\u767d\u8d28").append(yesterdayMacro.get("protein")).append("g\uff0c\u78b3\u6c34").append(yesterdayMacro.get("carbs")).append("g\uff0c\u8102\u80aa").append(yesterdayMacro.get("fat")).append("g\n\n");
+            context.append("【近期饮食数据】\n");
+            context.append("今日摄入：热量").append(todayMacro.get("calories")).append("kcal，蛋白质").append(todayMacro.get("protein")).append("g，碳水").append(todayMacro.get("carbs")).append("g，脂肪").append(todayMacro.get("fat")).append("g\n");
+            context.append("昨日摄入：热量").append(yesterdayMacro.get("calories")).append("kcal，蛋白质").append(yesterdayMacro.get("protein")).append("g，碳水").append(yesterdayMacro.get("carbs")).append("g，脂肪").append(yesterdayMacro.get("fat")).append("g\n\n");
             int todayBurned = this.exerciseRecordService.getDayTotalCaloriesBurned(userId, today);
             int yesterdayBurned = this.exerciseRecordService.getDayTotalCaloriesBurned(userId, yesterday);
-            context.append("\u3010\u8fd1\u671f\u8bad\u7ec3\u6d88\u8017\u3011\n\u4eca\u65e5\uff1a").append(todayBurned).append("\u5927\u5361\uff0c\u6628\u65e5\uff1a").append(yesterdayBurned).append("\u5927\u5361\n\n");
+            context.append("【近期训练消耗】\n今日：").append(todayBurned).append("大卡，昨日：").append(yesterdayBurned).append("大卡\n\n");
             String foodCatalog = this.buildFoodCatalog(userId, null);
-            context.append("\u3010\u98df\u7269\u8425\u517b\u53c2\u8003\u3011\n").append(foodCatalog).append("\n\n");
-            context.append("\u7528\u6237\u7684\u5177\u4f53\u8981\u6c42\uff1a").append(message);
+            context.append("【食物营养参考】\n").append(foodCatalog).append("\n\n");
+            context.append("用户的具体要求：").append(message);
             String aiReply = this.callAiApiStream(REPORT_DIET_ISSUE_PROMPT, context.toString(), outputStream, null, 1500);
             if (!this.isBlank(aiReply)) {
                 resultHolder.append(aiReply);
@@ -1157,7 +1157,7 @@ implements ChatService {
             return new ToolCallResult("diet_plan", "diet");
         }
         catch (Exception e) {
-            log.error("handleReportDietIssueIntent\u5f02\u5e38", (Throwable)e);
+            log.error("handleReportDietIssueIntent异常", (Throwable)e);
             return null;
         }
     }
@@ -1165,14 +1165,14 @@ implements ChatService {
     private ToolCallResult handleQueryWeatherIntent(User user, String message, OutputStream outputStream) {
         try {
             String weatherContext = this.getWeatherContextForUser(user);
-            String systemPrompt = "\u4f60\u662f\u5065\u8eab\u52a9\u624bTatan\u3002\u7528\u6237\u5728\u8be2\u95ee\u5929\u6c14\u60c5\u51b5\uff0c\u8bf7\u7ed3\u5408\u5929\u6c14\u7ed9\u51fa\u8fd0\u52a8\u5efa\u8bae\u3002\u5982\u679c\u5929\u6c14\u6076\u52a3\u5efa\u8bae\u5ba4\u5185\u8bad\u7ec3\uff0c\u5929\u6c14\u597d\u53ef\u4ee5\u9f13\u52b1\u6237\u5916\u8fd0\u52a8\u3002\u56de\u590d\u7b80\u6d01\u53cb\u597d\uff0c100\u5b57\u4ee5\u5185\u3002";
+            String systemPrompt = "你是健身助手Tatan。用户在询问天气情况，请结合天气给出运动建议。如果天气恶劣建议室内训练，天气好可以鼓励户外运动。回复简洁友好，100字以内。";
             Object userMsg = message;
-            userMsg = weatherContext != null ? (String)userMsg + "\n\n" + weatherContext : (String)userMsg + "\n\n\uff08\u5929\u6c14\u6570\u636e\u83b7\u53d6\u5931\u8d25\uff0c\u8bf7\u6839\u636e\u5e38\u8bc6\u56de\u7b54\uff09";
+            userMsg = weatherContext != null ? (String)userMsg + "\n\n" + weatherContext : (String)userMsg + "\n\n（天气数据获取失败，请根据常识回答）";
             String reply = this.callAiApiStream(systemPrompt, (String)userMsg, outputStream, null, 256);
             return new ToolCallResult("query_weather", "");
         }
         catch (Exception e) {
-            log.error("\u67e5\u8be2\u5929\u6c14\u5931\u8d25", (Throwable)e);
+            log.error("查询天气失败", (Throwable)e);
             return null;
         }
     }
@@ -1191,7 +1191,7 @@ implements ChatService {
                 List<ExerciseSession> sessions = this.exerciseRecordService.listByUserAndDate(userId, today);
                 index = this.resolveDeleteIndex(sessions, target);
                 if (index < 0 || index >= sessions.size()) {
-                    String reply = "\u6ca1\u6709\u627e\u5230" + (target != null ? "\u5305\u542b\"" + target + "\"\u7684" : "") + "\u8bad\u7ec3\u8bb0\u5f55";
+                    String reply = "没有找到" + (target != null ? "包含\"" + target + "\"的" : "") + "训练记录";
                     this.writeSseDataGradually(this.outputStreamLocal.get(), reply);
                     this.resultHolderLocal.get().append(reply);
                     return new ToolCallResult("general_chat", "");
@@ -1201,7 +1201,7 @@ implements ChatService {
                 List<DietRecord> records = this.dietRecordService.listByUserAndDate(userId, today);
                 index = this.resolveDeleteIndex(records, target);
                 if (index < 0 || index >= records.size()) {
-                    String reply = "\u6ca1\u6709\u627e\u5230" + (target != null ? "\u5305\u542b\"" + target + "\"\u7684" : "") + "\u996e\u98df\u8bb0\u5f55";
+                    String reply = "没有找到" + (target != null ? "包含\"" + target + "\"的" : "") + "饮食记录";
                     this.writeSseDataGradually(this.outputStreamLocal.get(), reply);
                     this.resultHolderLocal.get().append(reply);
                     return new ToolCallResult("general_chat", "");
@@ -1212,14 +1212,14 @@ implements ChatService {
                     this.userDailyMetricService.syncDailyCalories(userId, today, this.dietRecordService.listLegacyRecords(userId, today), this.resolveTargetCalories(user));
                 }
             }
-            String typeName = "exercise".equals(type) ? "\u8bad\u7ec3" : "\u996e\u98df";
-            String reply = deleted ? "\u597d\u7684\uff0c\u5df2\u5220\u9664" + typeName + "\u8bb0\u5f55" : "\u5220\u9664\u5931\u8d25\uff0c\u53ef\u80fd\u8bb0\u5f55\u5df2\u4e0d\u5b58\u5728";
+            String typeName = "exercise".equals(type) ? "训练" : "饮食";
+            String reply = deleted ? "好的，已删除" + typeName + "记录" : "删除失败，可能记录已不存在";
             this.writeSseDataGradually(this.outputStreamLocal.get(), reply);
             this.resultHolderLocal.get().append(reply);
             return new ToolCallResult("general_chat", "");
         }
         catch (Exception e) {
-            log.error("handleDeleteRecordIntent\u5f02\u5e38", (Throwable)e);
+            log.error("handleDeleteRecordIntent异常", (Throwable)e);
             return null;
         }
     }
@@ -1256,82 +1256,82 @@ implements ChatService {
     }
 
     private ToolCallResult handleQueryTrainingIntent(Long userId, String message, User user, ChatHistory history, UserRecord userRecord, String purifiedText, OutputStream outputStream, StringBuilder resultHolder, Map<String, Object> intentMap) {
-        String queryType = this.toCleanString(intentMap.getOrDefault("query_type", "\u5df2\u5b8c\u6210\u7684\u8bb0\u5f55"));
-        String targetDay = this.toCleanString(intentMap.getOrDefault("target_day", "\u4eca\u5929"));
-        if ("\u8ba1\u5212\u5b89\u6392".equals(queryType)) {
+        String queryType = this.toCleanString(intentMap.getOrDefault("query_type", "已完成的记录"));
+        String targetDay = this.toCleanString(intentMap.getOrDefault("target_day", "今天"));
+        if ("计划安排".equals(queryType)) {
             boolean isRestDay;
             String data;
             String replyType = "today_training_plan";
-            if ("\u5168\u90e8".equals(targetDay)) {
+            if ("全部".equals(targetDay)) {
                 data = this.buildTrainingPlanText(userId);
             } else {
-                int offset = "\u660e\u5929".equals(targetDay) ? 1 : 0;
+                int offset = "明天".equals(targetDay) ? 1 : 0;
                 data = this.buildTrainingPlanDaySection(userId, offset);
             }
             if (data == null || data.isBlank()) {
-                data = "\u6682\u65e0\u8bad\u7ec3\u5b89\u6392";
+                data = "暂无训练安排";
             }
-            boolean bl = isRestDay = data.contains("\u4f11\u606f\u65e5") || data.contains("\u4f11\u606f");
+            boolean bl = isRestDay = data.contains("休息日") || data.contains("休息");
             if (isRestDay) {
                 replyType = "today_rest_day";
             }
-            String prompt = "\u4f60\u662f\u5065\u8eab\u52a9\u624bTatan\u3002\u6839\u636e\u4e0b\u65b9\u6570\u636e\uff0c\u7b80\u6d01\u4eb2\u5207\u5730\u56de\u7b54\u7528\u6237\u3002\u7eaf\u6587\u672c\uff0c\u4e0d\u7528markdown\u3002\u5fc5\u987b\u5b8c\u6574\u5217\u51fa\u6240\u6709\u5185\u5bb9\u3002";
+            String prompt = "你是健身助手Tatan。根据下方数据，简洁亲切地回答用户。纯文本，不用markdown。必须完整列出所有内容。";
             String summarized = this.streamSummarizeWithToolData(userId, user, message, data, prompt, outputStream, resultHolder);
             return new ToolCallResult(replyType, "");
         }
         String replyType = "today_exercise_record";
         String data = this.buildTodayExerciseReply(userId);
         if (data == null || data.isBlank()) {
-            data = "\u4eca\u5929\u6682\u65e0\u8bad\u7ec3\u8bb0\u5f55";
+            data = "今天暂无训练记录";
         }
-        String prompt = "\u4f60\u662f\u5065\u8eab\u52a9\u624bTatan\u3002\u6839\u636e\u4e0b\u65b9\u6570\u636e\uff0c\u7b80\u6d01\u4eb2\u5207\u5730\u56de\u7b54\u7528\u6237\u3002\u7eaf\u6587\u672c\uff0c\u4e0d\u7528markdown\u3002\u5fc5\u987b\u5b8c\u6574\u5217\u51fa\u6bcf\u4e2a\u52a8\u4f5c\u3002";
+        String prompt = "你是健身助手Tatan。根据下方数据，简洁亲切地回答用户。纯文本，不用markdown。必须完整列出每个动作。";
         String summarized = this.streamSummarizeWithToolData(userId, user, message, data, prompt, outputStream, resultHolder);
         return new ToolCallResult(replyType, "");
     }
 
     private ToolCallResult handleQueryDietIntent(Long userId, String message, User user, ChatHistory history, UserRecord userRecord, String purifiedText, OutputStream outputStream, StringBuilder resultHolder, Map<String, Object> intentMap) {
-        String queryType = this.toCleanString(intentMap.getOrDefault("query_type", "\u5df2\u5b8c\u6210\u7684\u8bb0\u5f55"));
-        String mealType = this.toCleanString(intentMap.getOrDefault("meal_type", "\u5168\u90e8"));
-        if ("\u8ba1\u5212\u5b89\u6392".equals(queryType)) {
+        String queryType = this.toCleanString(intentMap.getOrDefault("query_type", "已完成的记录"));
+        String mealType = this.toCleanString(intentMap.getOrDefault("meal_type", "全部"));
+        if ("计划安排".equals(queryType)) {
             String section;
             String replyType = "today_diet_plan";
             String planText = this.buildDietPlanText(userId);
-            Object data = planText == null || planText.isBlank() ? "\u8fd8\u6ca1\u6709\u996e\u98df\u8ba1\u5212" : ("\u5168\u90e8".equals(mealType) ? planText : ((section = this.extractDietMealSection(planText, mealType)) != null && !section.isBlank() ? section : "\u5f53\u524d\u996e\u98df\u8ba1\u5212\u91cc\u6ca1\u6709" + mealType + "\u63a8\u8350"));
-            String prompt = "\u4f60\u662f\u5065\u8eab\u52a9\u624bTatan\u3002\u6839\u636e\u4e0b\u65b9\u6570\u636e\uff0c\u7b80\u6d01\u4eb2\u5207\u5730\u56de\u7b54\u7528\u6237\u3002\u7eaf\u6587\u672c\uff0c\u4e0d\u7528markdown\u3002\u5fc5\u987b\u5b8c\u6574\u5217\u51fa\u6bcf\u4e2a\u9910\u6b21\u3002";
+            Object data = planText == null || planText.isBlank() ? "还没有饮食计划" : ("全部".equals(mealType) ? planText : ((section = this.extractDietMealSection(planText, mealType)) != null && !section.isBlank() ? section : "当前饮食计划里没有" + mealType + "推荐"));
+            String prompt = "你是健身助手Tatan。根据下方数据，简洁亲切地回答用户。纯文本，不用markdown。必须完整列出每个餐次。";
             String summarized = this.streamSummarizeWithToolData(userId, user, message, (String)data, prompt, outputStream, resultHolder);
             return new ToolCallResult(replyType, "");
         }
         String replyType = "today_diet_record";
         String data = this.buildTodayDietReply(userId);
         if (data == null || data.isBlank()) {
-            data = "\u4eca\u5929\u6682\u65e0\u996e\u98df\u8bb0\u5f55";
+            data = "今天暂无饮食记录";
         }
-        String prompt = "\u4f60\u662f\u5065\u8eab\u52a9\u624bTatan\u3002\u6839\u636e\u4e0b\u65b9\u6570\u636e\uff0c\u7b80\u6d01\u4eb2\u5207\u5730\u56de\u7b54\u7528\u6237\u3002\u7eaf\u6587\u672c\uff0c\u4e0d\u7528markdown\u3002\u5fc5\u987b\u5b8c\u6574\u5217\u51fa\u6bcf\u4e2a\u9910\u6b21\u548c\u98df\u7269\u3002";
+        String prompt = "你是健身助手Tatan。根据下方数据，简洁亲切地回答用户。纯文本，不用markdown。必须完整列出每个餐次和食物。";
         String summarized = this.streamSummarizeWithToolData(userId, user, message, data, prompt, outputStream, resultHolder);
         return new ToolCallResult(replyType, "");
     }
 
     private ToolCallResult handleQueryWeightIntent(Long userId, String message, User user, ChatHistory history, UserRecord userRecord, String purifiedText, OutputStream outputStream, StringBuilder resultHolder, Map<String, Object> intentMap) {
         String data;
-        String range = this.toCleanString(intentMap.getOrDefault("range", "\u6700\u8fd17\u5929"));
+        String range = this.toCleanString(intentMap.getOrDefault("range", "最近7天"));
         LocalDate endDate = LocalDate.now(CN_ZONE);
         int days = switch (range) {
-            case "\u4eca\u5929" -> 0;
-            case "\u6700\u8fd130\u5929" -> 29;
+            case "今天" -> 0;
+            case "最近30天" -> 29;
             default -> 6;
         };
         LocalDate startDate = endDate.minusDays(days);
         List<UserWeightRecord> records = this.userWeightRecordService.listByUserAndDateRange(userId, startDate, endDate);
         if (records == null || records.isEmpty()) {
-            data = "\u6682\u65e0\u4f53\u91cd\u8bb0\u5f55";
+            data = "暂无体重记录";
         } else {
-            StringBuilder ws = new StringBuilder("\u4f53\u91cd\u8bb0\u5f55\uff08").append(range).append("\uff09\uff1a\n");
+            StringBuilder ws = new StringBuilder("体重记录（").append(range).append("）：\n");
             for (UserWeightRecord r : records) {
-                ws.append(r.getRecordDate()).append("\uff1a").append(r.getWeight()).append("kg\n");
+                ws.append(r.getRecordDate()).append("：").append(r.getWeight()).append("kg\n");
             }
             data = ws.toString().trim();
         }
-        String prompt = "\u4f60\u662f\u5065\u8eab\u52a9\u624bTatan\u3002\u6839\u636e\u4e0b\u65b9\u4f53\u91cd\u6570\u636e\uff0c\u7b80\u6d01\u4eb2\u5207\u5730\u56de\u7b54\u7528\u6237\u3002\u7eaf\u6587\u672c\uff0c\u4e0d\u7528markdown\u3002\u5982\u679c\u6709\u53d8\u5316\u8d8b\u52bf\u53ef\u4ee5\u9002\u5f53\u603b\u7ed3\u3002";
+        String prompt = "你是健身助手Tatan。根据下方体重数据，简洁亲切地回答用户。纯文本，不用markdown。如果有变化趋势可以适当总结。";
         String summarized = this.streamSummarizeWithToolData(userId, user, message, data, prompt, outputStream, resultHolder);
         return new ToolCallResult("general_chat", "");
     }
@@ -1344,14 +1344,14 @@ implements ChatService {
                 args.put("date_description", this.toCleanString(intentMap.get("date_description")));
             }
             if ((data = this.executeDataToolCall(userId, toolName, args, user, userRecord)) == null || data.isBlank()) {
-                data = "\u6682\u65e0\u8bb0\u5f55";
+                data = "暂无记录";
             }
-            String prompt = "\u4f60\u662f\u5065\u8eab\u52a9\u624bTatan\u3002\u6839\u636e\u4e0b\u65b9\u6570\u636e\uff0c\u7b80\u6d01\u4eb2\u5207\u5730\u56de\u7b54\u7528\u6237\u3002\u7eaf\u6587\u672c\uff0c\u4e0d\u7528markdown\u3002\u5fc5\u987b\u5b8c\u6574\u5217\u51fa\u6240\u6709\u8bb0\u5f55\u3002";
+            String prompt = "你是健身助手Tatan。根据下方数据，简洁亲切地回答用户。纯文本，不用markdown。必须完整列出所有记录。";
             this.streamSummarizeWithToolData(userId, user, message, data, prompt, outputStream, resultHolder);
             return new ToolCallResult(replyType, savePlanType);
         }
         catch (Exception e) {
-            log.error("handleQueryDataIntent\u5f02\u5e38", (Throwable)e);
+            log.error("handleQueryDataIntent异常", (Throwable)e);
             return new ToolCallResult("general_chat", "");
         }
     }
@@ -1371,7 +1371,7 @@ implements ChatService {
             } else {
                 String exerciseName = this.extractExerciseNameFromQuery(query);
                 if (exerciseName == null) {
-                    String data2 = "\u77e5\u8bc6\u5e93\u6682\u65e0\u8be5\u77e5\u8bc6\uff0c\u6211\u65e0\u6cd5\u56de\u7b54";
+                    String data2 = "知识库暂无该知识，我无法回答";
                     this.writeSseDataGradually(this.outputStreamLocal.get(), data2);
                     this.resultHolderLocal.get().append(data2);
                     return new ToolCallResult("general_chat", "");
@@ -1380,18 +1380,18 @@ implements ChatService {
                 if (exerciseInfo != null && !exerciseInfo.isBlank()) {
                     data = exerciseInfo;
                 } else {
-                    String data3 = "\u77e5\u8bc6\u5e93\u6682\u65e0\u8be5\u77e5\u8bc6\uff0c\u6211\u65e0\u6cd5\u56de\u7b54";
+                    String data3 = "知识库暂无该知识，我无法回答";
                     this.writeSseDataGradually(this.outputStreamLocal.get(), data3);
                     this.resultHolderLocal.get().append(data3);
                     return new ToolCallResult("general_chat", "");
                 }
             }
-            String prompt = "\u4f60\u662f\u5065\u8eab\u52a9\u624bTatan\u3002\u6839\u636e\u4e0b\u65b9\u77e5\u8bc6\u5e93\u5185\u5bb9\uff0c\u7b80\u6d01\u4e13\u4e1a\u5730\u56de\u7b54\u7528\u6237\u7684\u5065\u8eab\u95ee\u9898\u3002\u7eaf\u6587\u672c\uff0c\u4e0d\u7528markdown\u3002\u5982\u679c\u77e5\u8bc6\u5e93\u5185\u5bb9\u4e0d\u8db3\u4ee5\u56de\u7b54\uff0c\u56de\u590d\uff1a\u77e5\u8bc6\u5e93\u6682\u65e0\u8be5\u77e5\u8bc6\uff0c\u6211\u65e0\u6cd5\u56de\u7b54\u3002";
+            String prompt = "你是健身助手Tatan。根据下方知识库内容，简洁专业地回答用户的健身问题。纯文本，不用markdown。如果知识库内容不足以回答，回复：知识库暂无该知识，我无法回答。";
             this.streamSummarizeWithToolData(userId, user, message, data, prompt, outputStream, resultHolder);
             return new ToolCallResult("general_chat", "");
         }
         catch (Exception e) {
-            log.error("handleSearchKnowledgeIntent\u5f02\u5e38", (Throwable)e);
+            log.error("handleSearchKnowledgeIntent异常", (Throwable)e);
             return new ToolCallResult("general_chat", "");
         }
     }
@@ -1415,7 +1415,7 @@ implements ChatService {
             return this.getWeatherContextAsync();
         }
         catch (Exception e) {
-            log.warn("[Weather] \u83b7\u53d6\u5929\u6c14\u4e0a\u4e0b\u6587\u5931\u8d25: {}", (Object)e.getMessage());
+            log.warn("[Weather] 获取天气上下文失败: {}", (Object)e.getMessage());
             return null;
         }
     }
@@ -1426,7 +1426,7 @@ implements ChatService {
             return this.weatherHelper.buildWeatherContextByIp(ip);
         }
         catch (Exception e) {
-            log.warn("[Weather] \u83b7\u53d6\u5929\u6c14\u4e0a\u4e0b\u6587\u5931\u8d25: {}", (Object)e.getMessage());
+            log.warn("[Weather] 获取天气上下文失败: {}", (Object)e.getMessage());
             return null;
         }
     }
@@ -1449,7 +1449,7 @@ implements ChatService {
                 update.setCity(city);
                 update.setCityEn(cityEn);
                 this.userService.updateById(update);
-                log.info("[Weather] \u5df2\u4fdd\u5b58\u7528\u6237[{}]\u57ce\u5e02: {} / {}", new Object[]{userId, city, cityEn});
+                log.info("[Weather] 已保存用户[{}]城市: {} / {}", new Object[]{userId, city, cityEn});
             }
         }
         catch (Exception exception) {
@@ -1496,17 +1496,17 @@ implements ChatService {
             String streamed;
             String weatherContext;
             String msgLower = message.toLowerCase();
-            boolean hasFitnessKeyword = msgLower.contains("\u7ec3") || msgLower.contains("\u5403") || msgLower.contains("\u8bb0\u5f55") || msgLower.contains("\u8ba1\u5212") || msgLower.contains("\u98df\u8c31") || msgLower.contains("\u8fd0\u52a8") || msgLower.contains("\u996e\u98df") || msgLower.contains("\u4f53\u91cd") || msgLower.contains("\u70ed\u91cf") || msgLower.contains("\u5361\u8def\u91cc") || msgLower.contains("\u6253\u5361") || msgLower.contains("\u8bad\u7ec3") || msgLower.contains("\u51cf\u8102") || msgLower.contains("\u589e\u808c") || msgLower.contains("\u86cb\u767d") || msgLower.contains("\u78b3\u6c34") || msgLower.contains("\u8102\u80aa");
+            boolean hasFitnessKeyword = msgLower.contains("练") || msgLower.contains("吃") || msgLower.contains("记录") || msgLower.contains("计划") || msgLower.contains("食谱") || msgLower.contains("运动") || msgLower.contains("饮食") || msgLower.contains("体重") || msgLower.contains("热量") || msgLower.contains("卡路里") || msgLower.contains("打卡") || msgLower.contains("训练") || msgLower.contains("减脂") || msgLower.contains("增肌") || msgLower.contains("蛋白") || msgLower.contains("碳水") || msgLower.contains("脂肪");
             String knowledgeResult = hasFitnessKeyword ? this.retrieveKnowledgeDirectly(message) : null;
             AiModelConfig.ModelProvider provider = this.requireActiveProvider();
             PromptContextDecision ctx = new PromptContextDecision(false, true, false, false, false, true, false, false);
             Object contextMsg = this.buildContextAwareUserMessage(message, history, userRecord, user, null, ctx);
             if (purifiedText != null && !purifiedText.isBlank()) {
-                contextMsg = (String)contextMsg + "\n\u3010\u7528\u6237\u8fd1\u671f\u753b\u50cf\u4fe1\u606f\u3011\n" + purifiedText + "\n";
+                contextMsg = (String)contextMsg + "\n【用户近期画像信息】\n" + purifiedText + "\n";
             }
             String systemPrompt = GENERAL_SYSTEM_PROMPT;
             if (knowledgeResult != null && !knowledgeResult.isBlank()) {
-                contextMsg = (String)contextMsg + "\n\u3010\u77e5\u8bc6\u5e93\u68c0\u7d22\u7ed3\u679c\u3011\n" + knowledgeResult + "\n";
+                contextMsg = (String)contextMsg + "\n【知识库检索结果】\n" + knowledgeResult + "\n";
                 systemPrompt = GENERAL_SYSTEM_PROMPT_WITH_KNOWLEDGE;
             }
             if (hasFitnessKeyword && (weatherContext = this.getWeatherContextAsync()) != null) {
@@ -1518,7 +1518,7 @@ implements ChatService {
             return new ToolCallResult("general_chat", "");
         }
         catch (Exception e) {
-            log.error("\u901a\u7528\u5bf9\u8bdd\u5f02\u5e38", (Throwable)e);
+            log.error("通用对话异常", (Throwable)e);
             return new ToolCallResult("general_chat", "");
         }
     }
@@ -1538,12 +1538,12 @@ implements ChatService {
             MessageRoutingDecision routingDecision = new MessageRoutingDecision(false, false, new PromptContextDecision(true, false, false, false, false, false, false, false), "none", planIntent, new TrainingPlanLookupDecision(false, "", false), new DietPlanLookupDecision(false, "", false), null, null);
             String extraNote = null;
             if (userRequest != null && !userRequest.isBlank()) {
-                extraNote = "\u7528\u6237\u7684\u5177\u4f53\u8981\u6c42\uff1a" + userRequest;
+                extraNote = "用户的具体要求：" + userRequest;
             }
             return this.handlePlanGeneration(message, user, history, outputStream, resultHolder, userRecord, routingDecision, extraNote);
         }
         catch (Exception e) {
-            log.error("\u8ba1\u5212\u751f\u6210\u4fe1\u53f7\u5de5\u5177\u6267\u884c\u5931\u8d25", (Throwable)e);
+            log.error("计划生成信号工具执行失败", (Throwable)e);
             return null;
         }
     }
@@ -1568,11 +1568,11 @@ implements ChatService {
         }
         if ("get_today_records".equals(toolName)) {
             String data = this.buildTodayRecordReply(user, userRecord);
-            return data != null && !data.isBlank() ? data : "\u6682\u65e0\u8bb0\u5f55";
+            return data != null && !data.isBlank() ? data : "暂无记录";
         }
         if ("get_week_records".equals(toolName)) {
             String data = this.buildWeekRecordReply(user, userRecord);
-            return data != null && !data.isBlank() ? data : "\u6682\u65e0\u8bb0\u5f55";
+            return data != null && !data.isBlank() ? data : "暂无记录";
         }
         return null;
     }
@@ -1580,17 +1580,17 @@ implements ChatService {
     private String fetchHistoryRecord(UserRecord userRecord, LocalDate target) {
         LocalDate today = LocalDate.now(CN_ZONE);
         if (target.isAfter(today)) {
-            return "\u8be5\u65e5\u671f\u8fd8\u6ca1\u5230\u54e6~";
+            return "该日期还没到哦~";
         }
         if (ChronoUnit.DAYS.between(target, today) > 14L) {
-            return "\u4e0d\u597d\u610f\u601d\uff0c\u8be5\u65e5\u671f\u6570\u636e\u5df2\u6e05\u9664\u6216\u672a\u8bb0\u5f55";
+            return "不好意思，该日期数据已清除或未记录";
         }
         if (target.equals(today.minusDays(1L))) {
             String summary = userRecord.getYesterdaySummary();
             if (summary != null && !summary.isBlank()) {
-                return "\u3010\u6628\u5929\u7684\u603b\u7ed3\u3011\n" + summary;
+                return "【昨天的总结】\n" + summary;
             }
-            return "\u6628\u5929\u6682\u65e0\u8bb0\u5f55\u5185\u5bb9";
+            return "昨天暂无记录内容";
         }
         LocalDate currentWeekStart = today.with(DayOfWeek.MONDAY);
         if (target.isBefore(currentWeekStart)) {
@@ -1598,23 +1598,23 @@ implements ChatService {
             if (weeklySummary != null && !weeklySummary.isBlank()) {
                 return weeklySummary;
             }
-            return "\u4e0a\u5468\u6682\u65e0\u603b\u7ed3\u5185\u5bb9";
+            return "上周暂无总结内容";
         }
         return this.searchReviewByDate(userRecord, target);
     }
 
     private String searchReviewByDate(UserRecord userRecord, LocalDate target) {
-        DateTimeFormatter fmt = DateTimeFormatter.ofPattern("M\u6708d\u65e5");
-        String dateKey = "\u3010" + fmt.format(target);
+        DateTimeFormatter fmt = DateTimeFormatter.ofPattern("M月d日");
+        String dateKey = "【" + fmt.format(target);
         List<String> reviews = this.parseJsonArray(userRecord.getWeeklyReviews());
         for (String review : reviews) {
             if (!review.replaceAll("\\s+", "").contains(dateKey)) continue;
-            if (review.contains("\u6682\u65e0\u8bb0\u5f55")) {
-                return fmt.format(target) + "\u6682\u65e0\u8bb0\u5f55\u5185\u5bb9";
+            if (review.contains("暂无记录")) {
+                return fmt.format(target) + "暂无记录内容";
             }
             return review;
         }
-        return fmt.format(target) + "\u6682\u65e0\u8bb0\u5f55\u5185\u5bb9";
+        return fmt.format(target) + "暂无记录内容";
     }
 
     private List<String> parseJsonArray(String json) {
@@ -1626,7 +1626,7 @@ implements ChatService {
             return (List)JSON_MAPPER.readValue(fixed, (TypeReference)new TypeReference<List<String>>(){});
         }
         catch (Exception e) {
-            log.warn("\u89e3\u6790JSON\u6570\u7ec4\u5931\u8d25: {}", (Object)json, (Object)e);
+            log.warn("解析JSON数组失败: {}", (Object)json, (Object)e);
             return this.extractStringItems(json);
         }
     }
@@ -1670,9 +1670,9 @@ implements ChatService {
                 minimalContext.append(userInfo.trim()).append("\n\n");
             }
             if (extraSystemNote != null && !extraSystemNote.isBlank()) {
-                minimalContext.append("\u3010\u7cfb\u7edf\u8bf4\u660e\u3011\n").append(extraSystemNote).append("\n");
+                minimalContext.append("【系统说明】\n").append(extraSystemNote).append("\n");
             }
-            minimalContext.append("\u3010\u5f53\u524d\u7528\u6237\u6d88\u606f\u3011\n").append(currentMessage);
+            minimalContext.append("【当前用户消息】\n").append(currentMessage);
             return minimalContext.toString();
         }
         StringBuilder context = new StringBuilder();
@@ -1685,13 +1685,13 @@ implements ChatService {
         boolean hasSummary = summary != null && !summary.isBlank();
         boolean bl = hasRecentMessages = recentMessages != null && !recentMessages.isEmpty();
         if (contextDecision.includeRecentDialog() && (hasSummary || hasRecentMessages)) {
-            context.append("\u3010\u5386\u53f2\u4e0a\u4e0b\u6587\u3011\n");
+            context.append("【历史上下文】\n");
             if (hasSummary) {
-                context.append("\u957f\u671f\u6458\u8981\uff1a\n").append(summary.trim()).append("\n\n");
+                context.append("长期摘要：\n").append(summary.trim()).append("\n\n");
             }
             if (hasRecentMessages) {
                 int start = Math.max(0, recentMessages.size() - 10);
-                context.append("\u6700\u8fd1\u539f\u6587\u5bf9\u8bdd\uff08\u6700\u591a5\u8f6e\uff09\uff1a\n");
+                context.append("最近原文对话（最多5轮）：\n");
                 for (int i = start; i < recentMessages.size(); ++i) {
                     String item = recentMessages.get(i);
                     if (item == null || item.isBlank()) continue;
@@ -1701,41 +1701,41 @@ implements ChatService {
             }
         }
         if (contextDecision.includeTrainingPlanContext() && user != null && (trainingPlanText = this.buildTrainingPlanText(user.getId())) != null && !trainingPlanText.isBlank()) {
-            context.append("\u3010\u5f53\u524d\u8bad\u7ec3\u8ba1\u5212\u3011\n").append(trainingPlanText.trim()).append("\n\n");
+            context.append("【当前训练计划】\n").append(trainingPlanText.trim()).append("\n\n");
         }
         if (contextDecision.includeDietPlanContext() && user != null && (dietPlanText = this.buildDietPlanText(user.getId())) != null && !dietPlanText.isBlank()) {
-            context.append("\u3010\u5f53\u524d\u996e\u98df\u8ba1\u5212\u3011\n").append(dietPlanText.trim()).append("\n\n");
+            context.append("【当前饮食计划】\n").append(dietPlanText.trim()).append("\n\n");
         }
         if (contextDecision.includeTodayRecord() && user != null) {
             String exRecords = this.exerciseRecordService.getLegacyRecordJson(user.getId(), LocalDate.now(CN_ZONE));
             String dietRecords = this.dietRecordService.getLegacyRecordJson(user.getId(), LocalDate.now(CN_ZONE));
             if (exRecords != null && !exRecords.isBlank() || dietRecords != null && !dietRecords.isBlank()) {
-                context.append("\u3010\u7528\u6237\u4eca\u65e5\u8bb0\u5f55\u3011\n");
+                context.append("【用户今日记录】\n");
                 if (exRecords != null && !exRecords.isBlank()) {
-                    context.append("\u8fd0\u52a8\u8bb0\u5f55\uff1a\n").append(exRecords.trim()).append("\n\n");
+                    context.append("运动记录：\n").append(exRecords.trim()).append("\n\n");
                 }
                 if (dietRecords != null && !dietRecords.isBlank()) {
-                    context.append("\u996e\u98df\u8bb0\u5f55\uff1a\n").append(dietRecords.trim()).append("\n\n");
+                    context.append("饮食记录：\n").append(dietRecords.trim()).append("\n\n");
                 }
             }
         }
         if (userRecord != null) {
             String yesterdaySummary = userRecord.getYesterdaySummary();
             if (contextDecision.includeYesterdaySummary() && yesterdaySummary != null && !yesterdaySummary.isBlank()) {
-                context.append("\u3010\u6628\u65e5\u603b\u7ed3\u3011\n").append(yesterdaySummary.trim()).append("\n\n");
+                context.append("【昨日总结】\n").append(yesterdaySummary.trim()).append("\n\n");
             }
             String weeklySummary = userRecord.getWeeklySummary();
             if (contextDecision.includeWeeklySummary() && weeklySummary != null && !weeklySummary.isBlank()) {
-                context.append("\u3010\u4e0a\u5468\u603b\u7ed3\u3011\n").append(weeklySummary.trim()).append("\n\n");
+                context.append("【上周总结】\n").append(weeklySummary.trim()).append("\n\n");
             }
         }
         if (contextDecision.includeEmotionalState() && history != null && history.getEmotionalState() != null && !history.getEmotionalState().isBlank()) {
-            context.append("\u3010\u7528\u6237\u5f53\u524d\u60c5\u7eea\u72b6\u6001\uff1a").append(history.getEmotionalState()).append("\u3011\n");
+            context.append("【用户当前情绪状态：").append(history.getEmotionalState()).append("】\n");
         }
         if (extraSystemNote != null && !extraSystemNote.isBlank()) {
-            context.append("\u3010\u7cfb\u7edf\u8bf4\u660e\u3011\n").append(extraSystemNote).append("\n");
+            context.append("【系统说明】\n").append(extraSystemNote).append("\n");
         }
-        context.append("\u3010\u5f53\u524d\u7528\u6237\u6d88\u606f\u3011\n").append(currentMessage);
+        context.append("【当前用户消息】\n").append(currentMessage);
         return context.toString();
     }
 
@@ -1743,46 +1743,46 @@ implements ChatService {
         String daySection;
         boolean hasRecord;
         if (user == null) {
-            return "\u6682\u65e0\u4eca\u65e5\u8bb0\u5f55";
+            return "暂无今日记录";
         }
         boolean bl = hasRecord = this.hasStructuredDietRecord(user.getId()) || this.hasStructuredExerciseRecord(user.getId());
         if (hasRecord) {
             String aiSummary = this.summarizeDailyRecord(user.getId(), user, null);
-            return aiSummary != null ? aiSummary : "\u4eca\u5929\u6682\u65e0\u8bb0\u5f55\uff0c\u8fd0\u52a8\u6216\u996e\u98df\u540e\u544a\u8bc9\u6211\uff0c\u6211\u5e2e\u4f60\u8bb0\u4e0b\u6765~";
+            return aiSummary != null ? aiSummary : "今天暂无记录，运动或饮食后告诉我，我帮你记下来~";
         }
         String trainingPlanText = this.buildTrainingPlanText(user.getId());
         if (trainingPlanText != null && !trainingPlanText.isBlank() && (daySection = this.buildTrainingPlanDaySection(user.getId(), 0)) != null) {
             String aiSummary = this.summarizeDailyRecord(user.getId(), user, daySection);
-            return aiSummary != null ? aiSummary : "\u4eca\u5929\u6682\u65e0\u8bb0\u5f55\uff0c\u8fd9\u662f\u4eca\u5929\u7684\u8bad\u7ec3\u5b89\u6392\uff1a\n" + daySection;
+            return aiSummary != null ? aiSummary : "今天暂无记录，这是今天的训练安排：\n" + daySection;
         }
-        return "\u4eca\u5929\u6682\u65e0\u8bb0\u5f55\uff0c\u8fd0\u52a8\u6216\u996e\u98df\u540e\u544a\u8bc9\u6211\uff0c\u6211\u5e2e\u4f60\u8bb0\u4e0b\u6765~";
+        return "今天暂无记录，运动或饮食后告诉我，我帮你记下来~";
     }
 
     private String buildTodayDietReply(Long userId) {
         if (userId == null) {
-            return "\u4eca\u5929\u6682\u65e0\u996e\u98df\u8bb0\u5f55\u3002";
+            return "今天暂无饮食记录。";
         }
         LocalDate today = LocalDate.now(CN_ZONE);
         List<Map<String, Object>> dietRecords = this.dietRecordService.listLegacyRecords(userId, today);
         if (dietRecords.isEmpty()) {
-            return "\u4eca\u5929\u6682\u65e0\u996e\u98df\u8bb0\u5f55\u3002";
+            return "今天暂无饮食记录。";
         }
-        StringBuilder sb = new StringBuilder("\u3010\u4eca\u65e5\u996e\u98df\u8bb0\u5f55\u3011\n");
+        StringBuilder sb = new StringBuilder("【今日饮食记录】\n");
         for (Map<String, Object> item : dietRecords) {
             String mealType = this.normalizeMealType(this.toCleanString(item.get("mealType")));
             String name = this.toCleanString(item.get("name"));
             String calories = item.get("calories") == null ? "" : String.valueOf(item.get("calories")) + "kcal";
             String protein = item.get("protein") != null ? String.format("%.0fg", ((Number)item.get("protein")).doubleValue()) : "";
             String time = this.toCleanString(item.get("time"));
-            sb.append("\u9910\u6b21\uff1a").append(mealType.isBlank() ? "\u672a\u5206\u7c7b" : mealType).append("\uff5c").append(calories.isBlank() ? "-" : calories);
+            sb.append("餐次：").append(mealType.isBlank() ? "未分类" : mealType).append("｜").append(calories.isBlank() ? "-" : calories);
             if (!protein.isEmpty()) {
-                sb.append("\uff5c\u86cb\u767d\u8d28").append(protein);
+                sb.append("｜蛋白质").append(protein);
             }
             if (!time.isBlank()) {
-                sb.append("\uff5c").append(time);
+                sb.append("｜").append(time);
             }
             sb.append("\n");
-            sb.append("\u98df\u7269\uff1a").append(name.isBlank() ? "\u672a\u547d\u540d\u98df\u7269" : name).append("\n");
+            sb.append("食物：").append(name.isBlank() ? "未命名食物" : name).append("\n");
         }
         String macroSummary = this.buildMacroSummaryText(userId, today);
         if (!macroSummary.isEmpty()) {
@@ -1793,50 +1793,50 @@ implements ChatService {
 
     private String buildTodayExerciseReply(Long userId) {
         if (userId == null) {
-            return "\u4eca\u5929\u6682\u65e0\u8bad\u7ec3\u8bb0\u5f55\u3002";
+            return "今天暂无训练记录。";
         }
         LocalDate today = LocalDate.now(CN_ZONE);
         List<Map<String, Object>> sessions = this.exerciseRecordService.listLegacyRecords(userId, today);
         if (sessions.isEmpty()) {
-            return "\u4eca\u5929\u6682\u65e0\u8bad\u7ec3\u8bb0\u5f55\u3002";
+            return "今天暂无训练记录。";
         }
-        StringBuilder sb = new StringBuilder("\u3010\u4eca\u65e5\u8bad\u7ec3\u8bb0\u5f55\u3011\n");
+        StringBuilder sb = new StringBuilder("【今日训练记录】\n");
         for (Map<String, Object> session : sessions) {
             String sessionName = this.toCleanString(session.get("name"));
             Integer sessionDuration = this.parseInteger(session.get("durationSeconds"));
             Integer sessionCalories = this.parseInteger(session.get("caloriesBurned"));
             List<Map<String, Object>> items = this.castObjectList(session.get("items"));
             if (sessionName.isBlank() && items.isEmpty()) continue;
-            sb.append("\u8bad\u7ec3\uff1a").append(sessionName.isBlank() ? "\u672a\u547d\u540d\u8bad\u7ec3" : sessionName);
+            sb.append("训练：").append(sessionName.isBlank() ? "未命名训练" : sessionName);
             if (sessionDuration != null && sessionDuration > 0) {
-                sb.append("\uff5c").append(Math.max(1, sessionDuration / 60)).append("\u5206\u949f");
+                sb.append("｜").append(Math.max(1, sessionDuration / 60)).append("分钟");
             }
             if (sessionCalories != null && sessionCalories > 0) {
-                sb.append("\uff5c\u6d88\u8017").append(sessionCalories).append("\u5927\u5361");
+                sb.append("｜消耗").append(sessionCalories).append("大卡");
             }
-            sb.append("\uff5c").append(items.size()).append("\u4e2a\u52a8\u4f5c").append("\n");
+            sb.append("｜").append(items.size()).append("个动作").append("\n");
             for (Map<String, Object> item : items) {
                 String name = this.toCleanString(item.get("name"));
                 String muscleGroup = this.toCleanString(item.get("muscleGroup"));
                 Integer durationSeconds = this.parseInteger(item.get("durationSeconds"));
                 Integer completedSets = this.parseInteger(item.get("completedSets"));
                 if (name.isBlank()) continue;
-                sb.append("\u52a8\u4f5c\uff1a").append(name);
+                sb.append("动作：").append(name);
                 if (!muscleGroup.isBlank()) {
-                    sb.append("\uff5c").append(muscleGroup);
+                    sb.append("｜").append(muscleGroup);
                 }
                 if (completedSets != null) {
-                    sb.append("\uff5c").append(completedSets).append("\u7ec4");
+                    sb.append("｜").append(completedSets).append("组");
                 }
                 if (durationSeconds != null && durationSeconds > 0) {
-                    sb.append("\uff5c").append(Math.max(1, durationSeconds / 60)).append("\u5206\u949f");
+                    sb.append("｜").append(Math.max(1, durationSeconds / 60)).append("分钟");
                 }
                 sb.append("\n");
             }
         }
         int totalBurned = this.exerciseRecordService.getDayTotalCaloriesBurned(userId, today);
         if (totalBurned > 0) {
-            sb.append("\n\u4eca\u65e5\u7d2f\u8ba1\u6d88\u8017\uff1a").append(totalBurned).append("\u5927\u5361");
+            sb.append("\n今日累计消耗：").append(totalBurned).append("大卡");
         }
         return sb.toString().trim();
     }
@@ -1852,7 +1852,7 @@ implements ChatService {
         double carbs = (Double)macro.get("carbs");
         double fat = (Double)macro.get("fat");
         StringBuilder sb = new StringBuilder();
-        sb.append(String.format("\u4eca\u65e5\u5df2\u6444\u5165\uff1a\u70ed\u91cf%dkcal\uff0c\u86cb\u767d\u8d28%.0fg\uff0c\u78b3\u6c34%.0fg\uff0c\u8102\u80aa%.0fg", calories, protein, carbs, fat));
+        sb.append(String.format("今日已摄入：热量%dkcal，蛋白质%.0fg，碳水%.0fg，脂肪%.0fg", calories, protein, carbs, fat));
         try {
             UserProfile profile = this.userProfileService.getByUserId(userId);
             if (profile != null) {
@@ -1860,7 +1860,7 @@ implements ChatService {
                 double d = profile.getCustomDailyCalories() != null && profile.getCustomDailyCalories() > 0.0 ? profile.getCustomDailyCalories() : (target = profile.getDailyCalorieBurn() != null ? profile.getDailyCalorieBurn() : 0.0);
                 if (target > 0.0) {
                     int remaining = (int)Math.round(target - (double)calories);
-                    sb.append(String.format("\uff08\u76ee\u6807%.0fkcal\uff0c%s%.0fkcal\uff09", target, remaining >= 0 ? "\u8fd8\u5dee" : "\u8d85\u51fa", Math.abs(remaining)));
+                    sb.append(String.format("（目标%.0fkcal，%s%.0fkcal）", target, remaining >= 0 ? "还差" : "超出", Math.abs(remaining)));
                 }
             }
         }
@@ -1872,20 +1872,20 @@ implements ChatService {
 
     private String buildWeekRecordReply(User user, UserRecord userRecord) {
         if (user == null) {
-            return "\u6682\u65e0\u672c\u5468\u8bb0\u5f55";
+            return "暂无本周记录";
         }
         if (userRecord != null && userRecord.getWeeklyReviews() != null && !userRecord.getWeeklyReviews().isBlank()) {
             List<String> reviews = this.parseJsonArray(userRecord.getWeeklyReviews());
             if (reviews.isEmpty()) {
-                return "\u672c\u5468\u6682\u65e0\u8bb0\u5f55";
+                return "本周暂无记录";
             }
-            StringBuilder sb = new StringBuilder("\u3010\u672c\u5468\u8bb0\u5f55\u3011\n");
+            StringBuilder sb = new StringBuilder("【本周记录】\n");
             for (String review : reviews) {
                 sb.append(review).append("\n\n");
             }
             return sb.toString().trim();
         }
-        return "\u672c\u5468\u6682\u65e0\u8bb0\u5f55\uff0c\u8fd0\u52a8\u6216\u996e\u98df\u540e\u544a\u8bc9\u6211\uff0c\u6211\u5e2e\u4f60\u8bb0\u4e0b\u6765~";
+        return "本周暂无记录，运动或饮食后告诉我，我帮你记下来~";
     }
 
     private WebClient getWebClient(AiModelConfig.ModelProvider provider) {
@@ -1916,7 +1916,7 @@ implements ChatService {
             return content == null ? "" : content.trim();
         }
         catch (Exception e) {
-            log.error("AI\u6587\u672c\u8c03\u7528\u5931\u8d25", (Throwable)e);
+            log.error("AI文本调用失败", (Throwable)e);
             return "";
         }
     }
@@ -1942,7 +1942,7 @@ implements ChatService {
             return msgObj == null ? null : (String)msgObj.get("content");
         }
         catch (Exception e) {
-            log.error("AI\u5355\u6d88\u606f\u8c03\u7528\u5931\u8d25", (Throwable)e);
+            log.error("AI单消息调用失败", (Throwable)e);
             return null;
         }
     }
@@ -1954,9 +1954,9 @@ implements ChatService {
             return null;
         }
         return switch (meal = matcher.group(1)) {
-            case "\u5348\u996d" -> "\u5348\u9910";
-            case "\u665a\u996d" -> "\u665a\u9910";
-            case "\u591c\u5bb5", "\u5bb5\u591c" -> "\u52a0\u9910";
+            case "午饭" -> "午餐";
+            case "晚饭" -> "晚餐";
+            case "夜宵", "宵夜" -> "加餐";
             default -> meal;
         };
     }
@@ -1964,18 +1964,18 @@ implements ChatService {
     private String getCurrentMealType() {
         int hour = LocalTime.now(CN_ZONE).getHour();
         if (hour < 10) {
-            return "\u65e9\u9910";
+            return "早餐";
         }
         if (hour < 14) {
-            return "\u5348\u9910";
+            return "午餐";
         }
         if (hour < 17) {
-            return "\u52a0\u9910";
+            return "加餐";
         }
         if (hour < 21) {
-            return "\u665a\u9910";
+            return "晚餐";
         }
-        return "\u52a0\u9910";
+        return "加餐";
     }
 
     private String buildTrainingPlanText(Long userId) {
@@ -1993,26 +1993,26 @@ implements ChatService {
         Map templateMap = this.userTrainingTemplateService.listTemplates(userId).stream().collect(Collectors.toMap(UserTrainingTemplateVO::getId, Function.identity(), (a, b) -> a, LinkedHashMap::new));
         int todayIndex = activeCycle.getTodayIndex() == null ? 1 : activeCycle.getTodayIndex();
         LocalDate today = LocalDate.now(CN_ZONE);
-        StringBuilder sb = new StringBuilder("\u8bad\u7ec3\u8ba1\u5212\n");
+        StringBuilder sb = new StringBuilder("训练计划\n");
         for (int i = 1; i <= activeCycle.getDayCount(); ++i) {
             int dayIndex = i;
             UserTrainingCycleVO.CycleDayVO day = activeCycle.getDays().stream().filter(d -> d.getDayIndex() != null && d.getDayIndex() == dayIndex).findFirst().orElse(null);
             int offsetFromToday = dayIndex - todayIndex;
             DayOfWeek targetDayOfWeek = today.plusDays(offsetFromToday).getDayOfWeek();
-            sb.append("\u661f\u671f").append(DAY_NAMES[targetDayOfWeek.getValue() - 1]).append("\uff1a");
+            sb.append("星期").append(DAY_NAMES[targetDayOfWeek.getValue() - 1]).append("：");
             if (day == null || day.getTemplateId() == null) {
-                sb.append("\u4f11\u606f\n");
+                sb.append("休息\n");
                 continue;
             }
             UserTrainingTemplateVO template = (UserTrainingTemplateVO)templateMap.get(day.getTemplateId());
             if (template == null || template.getItems() == null || template.getItems().isEmpty()) {
-                sb.append(day.getTemplateName() == null ? "\u4f11\u606f" : day.getTemplateName()).append("\n");
+                sb.append(day.getTemplateName() == null ? "休息" : day.getTemplateName()).append("\n");
                 continue;
             }
             sb.append(template.getName()).append("\n");
-            this.appendTrainingSection(sb, "\u70ed\u8eab", "warmup", template.getItems());
-            this.appendTrainingSection(sb, "\u6b63\u5f0f\u8bad\u7ec3", "main", template.getItems());
-            this.appendTrainingSection(sb, "\u62c9\u4f38", "stretch", template.getItems());
+            this.appendTrainingSection(sb, "热身", "warmup", template.getItems());
+            this.appendTrainingSection(sb, "正式训练", "main", template.getItems());
+            this.appendTrainingSection(sb, "拉伸", "stretch", template.getItems());
         }
         String result = sb.toString().trim();
         CACHED_TRAINING_PLAN_TEXT.set(result);
@@ -2033,17 +2033,17 @@ implements ChatService {
         int targetIndex = zeroBased + 1;
         UserTrainingCycleVO.CycleDayVO day = activeCycle.getDays().stream().filter(d -> d.getDayIndex() != null && d.getDayIndex() == targetIndex).findFirst().orElse(null);
         DayOfWeek targetDayOfWeek = LocalDate.now(CN_ZONE).plusDays(offsetDays).getDayOfWeek();
-        String title = "\u661f\u671f" + DAY_NAMES[targetDayOfWeek.getValue() - 1];
+        String title = "星期" + DAY_NAMES[targetDayOfWeek.getValue() - 1];
         if (day == null || day.getTemplateId() == null) {
-            return title + "\uff08\u4f11\u606f\u65e5\uff09\n\u4f11\u606f";
+            return title + "（休息日）\n休息";
         }
         UserTrainingTemplateVO template = (UserTrainingTemplateVO)templateMap.get(day.getTemplateId());
         if (template == null || template.getItems() == null || template.getItems().isEmpty()) {
-            return title + "\uff08\u4f11\u606f\u65e5\uff09\n\u4f11\u606f";
+            return title + "（休息日）\n休息";
         }
         String body = this.buildTrainingTemplateBody(template.getItems());
         String muscleLabel = this.inferTrainingDayMuscleLabel(template);
-        StringBuilder sb = new StringBuilder(title).append("\uff08").append(muscleLabel.isBlank() ? this.safeTrim(template.getName()) : muscleLabel).append("\uff09");
+        StringBuilder sb = new StringBuilder(title).append("（").append(muscleLabel.isBlank() ? this.safeTrim(template.getName()) : muscleLabel).append("）");
         if (!body.isBlank()) {
             sb.append("\n").append(body);
         }
@@ -2055,23 +2055,23 @@ implements ChatService {
         if (sectionItems.isEmpty()) {
             return;
         }
-        sb.append(label).append("\uff1a");
+        sb.append(label).append("：");
         ArrayList<String> parts = new ArrayList<String>();
         for (UserTrainingTemplateVO.TrainingItemVO item2 : sectionItems) {
             StringBuilder part = new StringBuilder(this.safeTrim(item2.getExerciseName()));
             ArrayList<String> detailParts = new ArrayList<>();
             if (item2.getRecommendedSets() != null) {
-                detailParts.add(item2.getRecommendedSets() + "\u7ec4");
+                detailParts.add(item2.getRecommendedSets() + "组");
             }
             if (item2.getRecommendedReps() != null && !item2.getRecommendedReps().isBlank()) {
                 detailParts.add(item2.getRecommendedReps());
             }
             if (!detailParts.isEmpty()) {
-                part.append("\uff08").append(String.join("\uff0c", detailParts)).append("\uff09");
+                part.append("（").append(String.join("，", detailParts)).append("）");
             }
             parts.add(part.toString());
         }
-        sb.append(String.join((CharSequence)"\u3001", parts)).append("\n");
+        sb.append(String.join((CharSequence)"、", parts)).append("\n");
     }
 
     private String buildTrainingTemplateBody(List<UserTrainingTemplateVO.TrainingItemVO> items) {
@@ -2079,9 +2079,9 @@ implements ChatService {
             return "";
         }
         StringBuilder sb = new StringBuilder();
-        this.appendTrainingSection(sb, "\u70ed\u8eab", "warmup", items);
-        this.appendTrainingSection(sb, "\u6b63\u5f0f\u8bad\u7ec3", "main", items);
-        this.appendTrainingSection(sb, "\u62c9\u4f38", "stretch", items);
+        this.appendTrainingSection(sb, "热身", "warmup", items);
+        this.appendTrainingSection(sb, "正式训练", "main", items);
+        this.appendTrainingSection(sb, "拉伸", "stretch", items);
         return sb.toString().trim();
     }
 
@@ -2095,12 +2095,12 @@ implements ChatService {
         }
         String dominantGroup = groupCount.entrySet().stream().max(Map.Entry.<String, Long>comparingByValue()).map(Map.Entry::getKey).orElse("");
         return switch (dominantGroup) {
-            case "chest" -> "\u80f8\u90e8";
-            case "back" -> "\u80cc\u90e8";
-            case "shoulders" -> "\u80a9\u90e8";
-            case "arms" -> "\u624b\u81c2";
-            case "legs" -> "\u817f\u90e8";
-            case "core" -> "\u6838\u5fc3";
+            case "chest" -> "胸部";
+            case "back" -> "背部";
+            case "shoulders" -> "肩部";
+            case "arms" -> "手臂";
+            case "legs" -> "腿部";
+            case "core" -> "核心";
             default -> "";
         };
     }
@@ -2117,25 +2117,25 @@ implements ChatService {
         Map mealTemplateMap = this.userDietTemplateService.listTemplates(userId).stream().collect(Collectors.toMap(UserDietTemplateVO::getId, Function.identity(), (a, b) -> a, LinkedHashMap::new));
         int todayIndex = activeCycle.getTodayIndex() == null ? 1 : activeCycle.getTodayIndex();
         LocalDate today = LocalDate.now(CN_ZONE);
-        StringBuilder sb = new StringBuilder("\u4e00\u65e5\u98df\u8c31\u63a8\u8350\n");
+        StringBuilder sb = new StringBuilder("一日食谱推荐\n");
         for (int i = 1; i <= activeCycle.getDayCount(); ++i) {
             int dayIndex = i;
             UserDietCycleVO.CycleDayVO day = activeCycle.getDays().stream().filter(d -> d.getDayIndex() != null && d.getDayIndex() == dayIndex).findFirst().orElse(null);
             int offsetFromToday = dayIndex - todayIndex;
             DayOfWeek targetDayOfWeek = today.plusDays(offsetFromToday).getDayOfWeek();
-            sb.append("\u661f\u671f").append(DAY_NAMES[targetDayOfWeek.getValue() - 1]).append("\uff1a");
+            sb.append("星期").append(DAY_NAMES[targetDayOfWeek.getValue() - 1]).append("：");
             if (day == null || day.getDayTemplateId() == null) {
-                sb.append("\u672a\u5b89\u6392\n");
+                sb.append("未安排\n");
                 continue;
             }
             UserDietDayTemplateVO dayTemplate = (UserDietDayTemplateVO)dayTemplateMap.get(day.getDayTemplateId());
-            sb.append(dayTemplate == null ? "\u672a\u5b89\u6392" : dayTemplate.getName()).append("\n");
+            sb.append(dayTemplate == null ? "未安排" : dayTemplate.getName()).append("\n");
             if (dayTemplate == null || dayTemplate.getMealSlots() == null) continue;
             for (String mealType : PLAN_MEAL_ORDER) {
                 UserDietTemplateVO mealTemplate;
                 UserDietDayTemplateVO.MealSlotVO slot = dayTemplate.getMealSlots().stream().filter(meal -> mealType.equals(this.normalizeMealType(meal.getMealType()))).findFirst().orElse(null);
                 if (slot == null || slot.getTemplateId() == null || (mealTemplate = (UserDietTemplateVO)mealTemplateMap.get(slot.getTemplateId())) == null || mealTemplate.getItems() == null || mealTemplate.getItems().isEmpty()) continue;
-                sb.append(mealType).append("\uff1a").append(mealTemplate.getName()).append("\n");
+                sb.append(mealType).append("：").append(mealTemplate.getName()).append("\n");
                 for (UserDietTemplateVO.DietTemplateItemVO item : mealTemplate.getItems()) {
                     sb.append("- ").append(this.safeTrim(item.getFoodName())).append(" ").append(item.getAmount() == null ? "" : item.getAmount().stripTrailingZeros().toPlainString()).append(this.safeTrim(item.getUnit())).append("\n");
                 }
@@ -2154,8 +2154,8 @@ implements ChatService {
         for (String rawLine : dietPlan.split("\\r?\\n")) {
             String normalizedMeal;
             String line = this.safeTrim(rawLine);
-            if (line.isBlank() || "\u4e00\u65e5\u98df\u8c31\u63a8\u8350".equals(line)) continue;
-            if (line.startsWith("\u661f\u671f")) {
+            if (line.isBlank() || "一日食谱推荐".equals(line)) continue;
+            if (line.startsWith("星期")) {
                 currentDay = line;
                 currentMeal = null;
                 planByDay.putIfAbsent(currentDay, new LinkedHashMap());
@@ -2179,7 +2179,7 @@ implements ChatService {
         if (planByDay.isEmpty()) {
             return null;
         }
-        String todayKey = "\u661f\u671f" + DAY_NAMES[LocalDate.now(CN_ZONE).getDayOfWeek().getValue() - 1];
+        String todayKey = "星期" + DAY_NAMES[LocalDate.now(CN_ZONE).getDayOfWeek().getValue() - 1];
         String todaySection = this.findDietMealSectionForDay(planByDay, todayKey, mealType);
         if (todaySection != null) {
             return todaySection;
@@ -2209,7 +2209,7 @@ implements ChatService {
     }
 
     private String extractDaySection(String trainingPlan, String dayName) {
-        Pattern p = Pattern.compile("(?:\u661f\u671f" + dayName + "|\u5468" + dayName + ")[\uff1a:\\s]*(.*?)(?=(?:\u661f\u671f[\u4e00\u4e8c\u4e09\u56db\u4e94\u516d\u65e5]|\u5468[\u4e00\u4e8c\u4e09\u56db\u4e94\u516d\u65e5])|$)", 32);
+        Pattern p = Pattern.compile("(?:星期" + dayName + "|周" + dayName + ")[：:\\s]*(.*?)(?=(?:星期[一二三四五六日]|周[一二三四五六日])|$)", 32);
         Matcher m = p.matcher(trainingPlan);
         if (m.find()) {
             String section = m.group(1).trim();
@@ -2232,13 +2232,13 @@ implements ChatService {
                     String[] lines;
                     String item = pendingItems.get(i);
                     for (String line : lines = item.split("\n")) {
-                        if (!line.startsWith("\u7528\u6237\uff1a")) continue;
+                        if (!line.startsWith("用户：")) continue;
                         recentUserMsgs.append(line.substring(3)).append("\n");
                     }
                 }
             }
-            String historyContext = recentUserMsgs.length() > 0 ? "\u3010\u8fd1\u671f\u5bf9\u8bdd\u8bb0\u5f55\uff08\u7528\u6237\u6d88\u606f\uff09\u3011\n" + String.valueOf(recentUserMsgs) + "\n" : "";
-            String prompt = "training_plan".equals(planIntent) ? "\u6839\u636e\u7528\u6237\u6d88\u606f\u3001\u8fd1\u671f\u5bf9\u8bdd\u548c\u7528\u6237\u4fe1\u606f\uff0c\u63d0\u53d6\u8bad\u7ec3\u8ba1\u5212\u7684\u5668\u68b0\u7b5b\u9009\u6761\u4ef6\u3002\n\n" + historyContext + "\u7528\u6237\u4fe1\u606f\uff1a" + userInfo + "\n\n\u7528\u6237\u6d88\u606f\uff1a" + userMessage + "\n\n\u8bf7\u4e25\u683c\u6309\u4ee5\u4e0bJSON\u683c\u5f0f\u8fd4\u56de\uff0c\u4e0d\u8981\u8f93\u51fa\u4efb\u4f55\u5176\u4ed6\u5185\u5bb9\uff1a\n{\"equipment\": \"\u5668\u68b0\u6761\u4ef6\"}\n\nequipment\u586b\u5199\u89c4\u5219\uff1a\n1. \u5982\u679c\u7528\u6237\u660e\u786e\u8bf4\u5f92\u624b/\u65e0\u5668\u68b0/\u81ea\u91cd\u8bad\u7ec3\uff0c\u586b \"\u5f92\u624b\"\n2. \u5982\u679c\u7528\u6237\u8bf4\u53ea\u6709\u67d0\u79cd\u5668\u68b0\uff08\u5982\u53ea\u6709\u54d1\u94c3\u3001\u53ea\u6709\u5f39\u529b\u5e26\uff09\uff0c\u586b\u8be5\u5668\u68b0\u540d\u79f0\uff08\u9017\u53f7\u5206\u9694\uff09\n3. \u5982\u679c\u7528\u6237\u8bf4\u4e0d\u80fd\u4f7f\u7528\u67d0\u79cd\u5668\u68b0\uff08\u5982\u6ca1\u6709\u6760\u94c3\u3001\u53bb\u4e0d\u4e86\u5065\u8eab\u623f\uff09\uff0c\u4ece\u7528\u6237\u753b\u50cf\u5668\u68b0\u4e2d\u6392\u9664\u4e0d\u53ef\u7528\u7684\uff0c\u586b\u5269\u4f59\u53ef\u7528\u5668\u68b0\n4. \u5982\u679c\u7528\u6237\u6ca1\u63d0\u5230\u5668\u68b0\u9650\u5236\uff0c\u586b \"null\"\uff08\u76f4\u63a5\u586bnull\u4e09\u4e2a\u5b57\u6bcd\uff09\uff0c\u5c06\u4f7f\u7528\u7528\u6237\u753b\u50cf\u4e2d\u7684\u5668\u68b0\u8bbe\u7f6e\n5. \u6ce8\u610f\u7528\u6237\u753b\u50cf\u4e2d\u7684\u8bad\u7ec3\u6c34\u5e73\uff08\u65b0\u624b/\u4e2d\u7ea7/\u9ad8\u7ea7\uff09\uff0c\u7b5b\u9009\u65f6\u8981\u914d\u5408\u5176\u6c34\u5e73\n6. \u4e0d\u8981\u81ea\u5df1\u7f16\u9020\u5668\u68b0\uff0c\u53ea\u6839\u636e\u7528\u6237\u6d88\u606f\u548c\u7528\u6237\u4fe1\u606f\u63a8\u65ad" : "\u6839\u636e\u7528\u6237\u6d88\u606f\u3001\u8fd1\u671f\u5bf9\u8bdd\u548c\u7528\u6237\u4fe1\u606f\uff0c\u63d0\u53d6\u996e\u98df\u8ba1\u5212\u7684\u98df\u7269\u7b5b\u9009\u6761\u4ef6\u3002\n\n" + historyContext + "\u7528\u6237\u4fe1\u606f\uff1a" + userInfo + "\n\n\u7528\u6237\u6d88\u606f\uff1a" + userMessage + "\n\n\u8bf7\u4e25\u683c\u6309\u4ee5\u4e0bJSON\u683c\u5f0f\u8fd4\u56de\uff0c\u4e0d\u8981\u8f93\u51fa\u4efb\u4f55\u5176\u4ed6\u5185\u5bb9\uff1a\n{\"foodCategory\": \"\u5206\u7c7b\u6761\u4ef6\"}\n\nfoodCategory\u586b\u5199\u89c4\u5219\uff1a\n1. \u5982\u679c\u7528\u6237\u8bf4\u4e0d\u4f1a\u505a\u996d/\u4e0d\u60f3\u505a\u996d/\u53ea\u80fd\u5403\u5373\u98df\uff0c\u586b \"\u5373\u98df\"\n2. \u5982\u679c\u7528\u6237\u63d0\u5230\u996e\u98df\u504f\u597d\uff08\u5982\u51cf\u8102\u3001\u4f4e\u78b3\u6c34\u3001\u9ad8\u86cb\u767d\uff09\uff0c\u586b\u5bf9\u5e94\u7684\u98df\u7269\u5206\u7c7b\u504f\u597d\n3. \u5982\u679c\u7528\u6237\u6ca1\u63d0\u5230\u996e\u98df\u9650\u5236\uff0c\u586b \"null\"\uff08\u76f4\u63a5\u586bnull\u4e09\u4e2a\u5b57\u6bcd\uff09\n4. \u53ea\u6839\u636e\u7528\u6237\u6d88\u606f\u63a8\u65ad\uff0c\u4e0d\u8981\u81ea\u5df1\u7f16\u9020";
+            String historyContext = recentUserMsgs.length() > 0 ? "【近期对话记录（用户消息）】\n" + String.valueOf(recentUserMsgs) + "\n" : "";
+            String prompt = "training_plan".equals(planIntent) ? "根据用户消息、近期对话和用户信息，提取训练计划的器械筛选条件。\n\n" + historyContext + "用户信息：" + userInfo + "\n\n用户消息：" + userMessage + "\n\n请严格按以下JSON格式返回，不要输出任何其他内容：\n{\"equipment\": \"器械条件\"}\n\nequipment填写规则：\n1. 如果用户明确说徒手/无器械/自重训练，填 \"徒手\"\n2. 如果用户说只有某种器械（如只有哑铃、只有弹力带），填该器械名称（逗号分隔）\n3. 如果用户说不能使用某种器械（如没有杠铃、去不了健身房），从用户画像器械中排除不可用的，填剩余可用器械\n4. 如果用户没提到器械限制，填 \"null\"（直接填null三个字母），将使用用户画像中的器械设置\n5. 注意用户画像中的训练水平（新手/中级/高级），筛选时要配合其水平\n6. 不要自己编造器械，只根据用户消息和用户信息推断" : "根据用户消息、近期对话和用户信息，提取饮食计划的食物筛选条件。\n\n" + historyContext + "用户信息：" + userInfo + "\n\n用户消息：" + userMessage + "\n\n请严格按以下JSON格式返回，不要输出任何其他内容：\n{\"foodCategory\": \"分类条件\"}\n\nfoodCategory填写规则：\n1. 如果用户说不会做饭/不想做饭/只能吃即食，填 \"即食\"\n2. 如果用户提到饮食偏好（如减脂、低碳水、高蛋白），填对应的食物分类偏好\n3. 如果用户没提到饮食限制，填 \"null\"（直接填null三个字母）\n4. 只根据用户消息推断，不要自己编造";
             AiModelConfig.ModelProvider provider = this.requireProvider(this.resolvePurificationModel(user));
             HashMap<String, Object> requestBody = new HashMap<String, Object>();
             requestBody.put("model", provider.getModel());
@@ -2259,12 +2259,12 @@ implements ChatService {
                 if ("null".equals(foodCategory)) {
                     foodCategory = null;
                 }
-                log.info("AI\u63d0\u53d6\u7b5b\u9009\u6761\u4ef6: planIntent={}, equipment={}, foodCategory={}", new Object[]{planIntent, equipment, foodCategory});
+                log.info("AI提取筛选条件: planIntent={}, equipment={}, foodCategory={}", new Object[]{planIntent, equipment, foodCategory});
                 return new PlanFilterConditions(equipment, foodCategory);
             }
         }
         catch (Exception e) {
-            log.warn("\u63d0\u53d6\u8ba1\u5212\u7b5b\u9009\u6761\u4ef6\u5931\u8d25\uff0c\u4f7f\u7528\u9ed8\u8ba4\u503c: {}", (Object)e.getMessage());
+            log.warn("提取计划筛选条件失败，使用默认值: {}", (Object)e.getMessage());
         }
         return new PlanFilterConditions(null, null);
     }
@@ -2285,7 +2285,7 @@ implements ChatService {
         PromptContextDecision promptContext = routingDecision == null ? this.defaultPromptContextDecision() : routingDecision.promptContext();
         Object contextAwareMessage = message;
         if (promptContext.includeTrainingPlanContext() && user != null && (trainingPlanText = this.buildTrainingPlanText(user.getId())) != null && !trainingPlanText.isBlank()) {
-            contextAwareMessage = message + "\n\n\u5f53\u524d\u5df2\u6709\u8bad\u7ec3\u8ba1\u5212\u53c2\u8003\uff1a\n" + trainingPlanText;
+            contextAwareMessage = message + "\n\n当前已有训练计划参考：\n" + trainingPlanText;
         }
         String string = planIntent = routingDecision == null ? "none" : routingDecision.planGenerationIntent();
         if (planIntent.isBlank() || "none".equals(planIntent)) {
@@ -2295,7 +2295,7 @@ implements ChatService {
         if ("diet_plan".equals(planIntent)) {
             String foodKnowledge = this.buildFoodCatalog(user != null ? user.getId() : null, filterConditions.foodCategory());
             String mealRequestInstruction = this.buildDietMealRequestInstruction(msg);
-            String prompt = DIET_PLAN_GEN_PROMPT.replace("{userInfo}", userInfo).replace("{foodKnowledge}", foodKnowledge != null ? foodKnowledge : "\u65e0").replace("{mealRequestInstruction}", mealRequestInstruction);
+            String prompt = DIET_PLAN_GEN_PROMPT.replace("{userInfo}", userInfo).replace("{foodKnowledge}", foodKnowledge != null ? foodKnowledge : "无").replace("{mealRequestInstruction}", mealRequestInstruction);
             String aiReply = this.callAiApiStream(prompt, (String)contextAwareMessage, outputStream, null, 900);
             return this.sanitizeDietPlanOutput(aiReply, this.resolveMealType(msg));
         }
@@ -2304,11 +2304,11 @@ implements ChatService {
             String exerciseCatalog = this.buildExerciseCatalog(user != null ? user.getId() : null, filterConditions.equipment());
             String weatherContext = this.getWeatherContextAsync();
             if (weatherContext != null) {
-                contextAwareMessage = (String)contextAwareMessage + "\n\n" + weatherContext + "\n\u8bf7\u53c2\u8003\u5929\u6c14\u60c5\u51b5\u5408\u7406\u5b89\u6392\u5ba4\u5185/\u5ba4\u5916\u8bad\u7ec3\u3002";
+                contextAwareMessage = (String)contextAwareMessage + "\n\n" + weatherContext + "\n请参考天气情况合理安排室内/室外训练。";
             }
             Object existingPlan = "";
             if (promptContext.includeTrainingPlanContext() && user != null && (trainingPlanText2 = this.buildTrainingPlanText(user.getId())) != null && !trainingPlanText2.isBlank()) {
-                existingPlan = "\n\u3010\u7528\u6237\u5f53\u524d\u5df2\u6709\u7684\u8bad\u7ec3\u8ba1\u5212\uff08\u7528\u6237\u53cd\u9988\u65f6\u5728\u6b64\u57fa\u7840\u4e0a\u8c03\u6574\uff09\u3011\n" + trainingPlanText2 + "\n";
+                existingPlan = "\n【用户当前已有的训练计划（用户反馈时在此基础上调整）】\n" + trainingPlanText2 + "\n";
             }
             String prompt = TRAINING_PLAN_GEN_PROMPT.replace("{userInfo}", userInfo).replace("{exerciseCatalog}", exerciseCatalog).replace("{existingPlan}", (CharSequence)existingPlan);
             String aiReply = this.callAiApiStream(prompt, (String)contextAwareMessage, outputStream, null, 1200);
@@ -2319,16 +2319,16 @@ implements ChatService {
 
     private void securityCheck(String message) {
         if (message == null || message.trim().isEmpty()) {
-            throw new BusincessException(StateCode.PARAMS_ERROR, "\u6d88\u606f\u4e0d\u80fd\u4e3a\u7a7a");
+            throw new BusincessException(StateCode.PARAMS_ERROR, "消息不能为空");
         }
         if (message.length() > 2000) {
-            throw new BusincessException(StateCode.PARAMS_ERROR, "\u6d88\u606f\u957f\u5ea6\u4e0d\u80fd\u8d85\u8fc72000\u5b57");
+            throw new BusincessException(StateCode.PARAMS_ERROR, "消息长度不能超过2000字");
         }
         if (Pattern.compile("<script.*?>.*?</script>", 2).matcher(message).find()) {
-            throw new BusincessException(StateCode.PARAMS_ERROR, "\u8f93\u5165\u5305\u542b\u975e\u6cd5\u5185\u5bb9");
+            throw new BusincessException(StateCode.PARAMS_ERROR, "输入包含非法内容");
         }
         if (Pattern.compile("(\\b(SELECT|INSERT|UPDATE|DELETE|DROP|UNION|ALTER|CREATE)\\b.*\\b(FROM|INTO|TABLE|DATABASE|WHERE)\\b)", 2).matcher(message).find()) {
-            throw new BusincessException(StateCode.PARAMS_ERROR, "\u8f93\u5165\u5305\u542b\u975e\u6cd5\u5185\u5bb9");
+            throw new BusincessException(StateCode.PARAMS_ERROR, "输入包含非法内容");
         }
     }
 
@@ -2346,7 +2346,7 @@ implements ChatService {
             return sb.toString().trim();
         }
         catch (Exception e) {
-            log.warn("RAG \u68c0\u7d22\u5931\u8d25: {}", (Object)e.getMessage());
+            log.warn("RAG 检索失败: {}", (Object)e.getMessage());
             return null;
         }
     }
@@ -2356,11 +2356,11 @@ implements ChatService {
         if (user == null) {
             return "";
         }
-        StringBuilder sb = new StringBuilder("\n\u3010\u7528\u6237\u3011" + user.getUsername() + "|");
-        String gender = user.getGender() != null ? (user.getGender() == 0 ? "\u5973" : "\u7537") : "\u672a\u77e5";
+        StringBuilder sb = new StringBuilder("\n【用户】" + user.getUsername() + "|");
+        String gender = user.getGender() != null ? (user.getGender() == 0 ? "女" : "男") : "未知";
         sb.append(gender);
         if (user.getAge() != null) {
-            sb.append("|").append(user.getAge()).append("\u5c81");
+            sb.append("|").append(user.getAge()).append("岁");
         }
         if (user.getHeight() != null) {
             sb.append("|").append(user.getHeight()).append("cm");
@@ -2370,46 +2370,46 @@ implements ChatService {
         }
         if ((p = this.userProfileService.getByUserId(user.getId())) != null) {
             if (p.getFitnessGoal() != null) {
-                sb.append("|\u76ee\u6807:").append(p.getFitnessGoal());
+                sb.append("|目标:").append(p.getFitnessGoal());
             }
             if (p.getTargetWeight() != null) {
-                sb.append("|\u76ee\u6807\u4f53\u91cd:").append(p.getTargetWeight()).append("kg");
+                sb.append("|目标体重:").append(p.getTargetWeight()).append("kg");
             }
             if (p.getActivityLevel() != null) {
-                sb.append("|\u6d3b\u52a8\u6c34\u5e73:").append(p.getActivityLevel());
+                sb.append("|活动水平:").append(p.getActivityLevel());
             }
             if (p.getCustomDailyCalories() != null) {
-                sb.append("|\u76ee\u6807\u70ed\u91cf:").append(p.getCustomDailyCalories().intValue()).append("kcal");
+                sb.append("|目标热量:").append(p.getCustomDailyCalories().intValue()).append("kcal");
             }
             if (p.getExperienceLevel() != null) {
-                sb.append("|\u8bad\u7ec3\u6c34\u5e73:").append(p.getExperienceLevel());
+                sb.append("|训练水平:").append(p.getExperienceLevel());
             }
             if (p.getPreferredEquipment() != null) {
-                sb.append("|\u5668\u68b0:").append(p.getPreferredEquipment());
+                sb.append("|器械:").append(p.getPreferredEquipment());
             }
             if (p.getWeeklyTrainingDays() != null) {
-                sb.append("|\u6bcf\u5468\u7ec3").append(p.getWeeklyTrainingDays()).append("\u5929");
+                sb.append("|每周练").append(p.getWeeklyTrainingDays()).append("天");
             }
             if (p.getTrainingDuration() != null) {
-                sb.append("|\u6bcf\u6b21").append(p.getTrainingDuration()).append("\u5206\u949f");
+                sb.append("|每次").append(p.getTrainingDuration()).append("分钟");
             }
             if (p.getOccupation() != null) {
-                sb.append("|\u804c\u4e1a:").append(p.getOccupation());
+                sb.append("|职业:").append(p.getOccupation());
             }
             if (p.getPersonality() != null) {
-                sb.append("|\u6027\u683c:").append(p.getPersonality());
+                sb.append("|性格:").append(p.getPersonality());
             }
             if (p.getMedicalHistory() != null) {
-                sb.append("|\u4f24\u75c5:").append(p.getMedicalHistory());
+                sb.append("|伤病:").append(p.getMedicalHistory());
             }
             if (p.getDietPreference() != null) {
-                sb.append("|\u996e\u98df:").append(p.getDietPreference());
+                sb.append("|饮食:").append(p.getDietPreference());
             }
             if (p.getTrainingPreference() != null) {
-                sb.append("|\u8bad\u7ec3\u504f\u597d:").append(p.getTrainingPreference());
+                sb.append("|训练偏好:").append(p.getTrainingPreference());
             }
             if (p.getUserProfileText() != null && !p.getUserProfileText().isBlank()) {
-                sb.append("|\u753b\u50cf:").append(p.getUserProfileText());
+                sb.append("|画像:").append(p.getUserProfileText());
             }
         }
         sb.append("\n");
@@ -2426,7 +2426,7 @@ implements ChatService {
         List<Exercise> exercises = this.exerciseService.getByFilters(effectiveEquipment, effectiveLevel);
         User user = (User)this.userService.getById(userId);
         if (exercises == null || exercises.isEmpty()) {
-            return "\uff08\u52a8\u4f5c\u5e93\u4e3a\u7a7a\uff09";
+            return "（动作库为空）";
         }
         HashSet favIds = new HashSet();
         if (user != null && user.getFavoritesExercises() != null && !user.getFavoritesExercises().isBlank()) {
@@ -2449,7 +2449,7 @@ implements ChatService {
                 return Integer.compare(aOrder, bOrder);
             });
         }
-        Map<String, String> groupMap = Map.of("chest", "\u80f8\u90e8", "back", "\u80cc\u90e8", "core", "\u6838\u5fc3", "arms", "\u624b\u81c2", "legs", "\u817f\u90e8", "shoulders", "\u80a9\u90e8");
+        Map<String, String> groupMap = Map.of("chest", "胸部", "back", "背部", "core", "核心", "arms", "手臂", "legs", "腿部", "shoulders", "肩部");
         LinkedHashMap mainByGroup = new LinkedHashMap();
         LinkedHashMap warmupByGroup = new LinkedHashMap();
         for (String group : PLAN_MUSCLE_GROUP_ORDER) {
@@ -2460,26 +2460,26 @@ implements ChatService {
             String groupKey;
             if (exercise == null || this.isBlank(exercise.getName()) || this.isBlank(exercise.getMuscleGroup()) || !mainByGroup.containsKey(groupKey = this.normalizePlanMuscleGroup(exercise.getMuscleGroup()))) continue;
             if (this.isWarmupExercise(exercise.getName())) {
-                Object wName = favIds.contains(exercise.getId()) ? exercise.getName() + "[\u6536\u85cf]" : exercise.getName();
+                Object wName = favIds.contains(exercise.getId()) ? exercise.getName() + "[收藏]" : exercise.getName();
                 this.addDistinctLimited((List)warmupByGroup.get(groupKey), (String)wName, 4);
                 continue;
             }
             if (this.isStretchExercise(exercise.getName())) continue;
-            Object mName = favIds.contains(exercise.getId()) ? exercise.getName() + "[\u6536\u85cf]" : exercise.getName();
+            Object mName = favIds.contains(exercise.getId()) ? exercise.getName() + "[收藏]" : exercise.getName();
             this.addDistinctLimited((List)mainByGroup.get(groupKey), (String)mName, 6);
         }
         StringBuilder sb = new StringBuilder();
-        sb.append("\u3010\u5206\u90e8\u4f4d\u8bad\u7ec3\u52a8\u4f5c\u5e93-\u8bad\u7ec3\u52a8\u4f5c\u53ea\u80fd\u4ece\u5bf9\u5e94\u90e8\u4f4d\u4e2d\u9009\u3011\n");
+        sb.append("【分部位训练动作库-训练动作只能从对应部位中选】\n");
         for (String group : PLAN_MUSCLE_GROUP_ORDER) {
             List actions = (List)mainByGroup.get(group);
             if (actions == null || actions.isEmpty()) continue;
-            sb.append(groupMap.getOrDefault(group, group)).append("\u8bad\u7ec3\u52a8\u4f5c\uff1a").append(String.join((CharSequence)"\u3001", actions)).append("\n");
+            sb.append(groupMap.getOrDefault(group, group)).append("训练动作：").append(String.join((CharSequence)"、", actions)).append("\n");
         }
-        sb.append("\n\u3010\u5206\u90e8\u4f4d\u70ed\u8eab\u52a8\u4f5c-\u70ed\u8eab\u53ea\u80fd\u4ece\u5f53\u5929\u8bad\u7ec3\u90e8\u4f4d\u5bf9\u5e94\u7684\u70ed\u8eab\u52a8\u4f5c\u4e2d\u9009\u3011\n");
+        sb.append("\n【分部位热身动作-热身只能从当天训练部位对应的热身动作中选】\n");
         for (String group : PLAN_MUSCLE_GROUP_ORDER) {
             List warmups = (List)warmupByGroup.get(group);
             if (warmups == null || warmups.isEmpty()) continue;
-            sb.append(groupMap.getOrDefault(group, group)).append("\u70ed\u8eab\u52a8\u4f5c\uff1a").append(String.join((CharSequence)"\u3001", warmups)).append("\n");
+            sb.append(groupMap.getOrDefault(group, group)).append("热身动作：").append(String.join((CharSequence)"、", warmups)).append("\n");
         }
         return sb.toString();
     }
@@ -2489,22 +2489,22 @@ implements ChatService {
             return "";
         }
         return switch (muscleGroup.trim().toLowerCase()) {
-            case "\u80f8\u90e8", "chest" -> "chest";
-            case "\u80cc\u90e8", "back" -> "back";
-            case "\u80a9\u90e8", "shoulder", "shoulders" -> "shoulders";
-            case "\u624b\u81c2", "arm", "arms" -> "arms";
-            case "\u817f\u90e8", "leg", "legs" -> "legs";
-            case "\u6838\u5fc3", "core" -> "core";
+            case "胸部", "chest" -> "chest";
+            case "背部", "back" -> "back";
+            case "肩部", "shoulder", "shoulders" -> "shoulders";
+            case "手臂", "arm", "arms" -> "arms";
+            case "腿部", "leg", "legs" -> "legs";
+            case "核心", "core" -> "core";
             default -> muscleGroup.trim().toLowerCase();
         };
     }
 
     private boolean isWarmupExercise(String name) {
-        return !this.isBlank(name) && name.contains("\u70ed\u8eab");
+        return !this.isBlank(name) && name.contains("热身");
     }
 
     private boolean isStretchExercise(String name) {
-        return !this.isBlank(name) && name.contains("\u62c9\u4f38");
+        return !this.isBlank(name) && name.contains("拉伸");
     }
 
     private void addDistinctLimited(List<String> target, String value, int limit) {
@@ -2517,7 +2517,7 @@ implements ChatService {
     private String buildFoodCatalog(Long userId, String overrideCategory) {
         List<FoodItem> foods = this.foodItemService.searchVisibleFoods(userId, "");
         if (foods == null || foods.isEmpty()) {
-            return "\u65e0";
+            return "无";
         }
         UserProfile profile = this.userProfileService.getByUserId(userId);
         ArrayList<FoodItem> myFoods = new ArrayList<FoodItem>();
@@ -2536,7 +2536,7 @@ implements ChatService {
         List<FoodItem> filteredSystem = systemFoods;
         if (effectiveCategory != null && !effectiveCategory.isBlank() && !"null".equals(effectiveCategory)) {
             HashSet<String> allowedCategories = new HashSet<String>();
-            for (String cat : effectiveCategory.split("[,\uff0c]")) {
+            for (String cat : effectiveCategory.split("[,，]")) {
                 String c = cat.trim();
                 if (c.isEmpty()) continue;
                 allowedCategories.add(c);
@@ -2553,10 +2553,10 @@ implements ChatService {
         selected.addAll(myFoods);
         selected.addAll(filteredSystem.stream().limit(Math.max(1, 12 - myFoods.size())).toList());
         StringBuilder sb = new StringBuilder();
-        sb.append("\u3010\u98df\u7269\u8425\u517b\u53c2\u8003\u3011\u540d\u79f0|\u5206\u7c7b|\u57fa\u51c6|\u70ed\u91cf(kcal)|\u86cb\u767d\u8d28(g)|\u78b3\u6c34(g)|\u8102\u80aa(g)\n");
+        sb.append("【食物营养参考】名称|分类|基准|热量(kcal)|蛋白质(g)|碳水(g)|脂肪(g)\n");
         for (FoodItem food : selected) {
             boolean isMine = food.getCreatedBy() != null && food.getCreatedBy().equals(userId) && !Integer.valueOf(1).equals(food.getIsSystem());
-            Object name = isMine ? this.safeTrim(food.getName()) + "[\u6211\u7684\u98df\u7269]" : this.safeTrim(food.getName());
+            Object name = isMine ? this.safeTrim(food.getName()) + "[我的食物]" : this.safeTrim(food.getName());
             String baseAmount = food.getBaseAmount() == null ? "-" : food.getBaseAmount().stripTrailingZeros().toPlainString();
             double calKcal = food.getCalories() != null ? food.getCalories().doubleValue() / 4.184 : 0.0;
             double protein = food.getProtein() != null ? food.getProtein().doubleValue() : 0.0;
@@ -2580,8 +2580,8 @@ implements ChatService {
             throw e;
         }
         catch (Exception e) {
-            log.error("\u6d41\u5f0f\u8c03\u7528AI\u63a5\u53e3\u5931\u8d25", (Throwable)e);
-            throw new BusincessException(StateCode.AI_ERROR, "\u5f53\u524dAI\u8c03\u7528\u5931\u8d25\uff0c\u8bf7\u5207\u6362\u522b\u7684AI\u8bd5\u4e00\u8bd5");
+            log.error("流式调用AI接口失败", (Throwable)e);
+            throw new BusincessException(StateCode.AI_ERROR, "当前AI调用失败，请切换别的AI试一试");
         }
     }
 
@@ -2627,7 +2627,7 @@ implements ChatService {
                 fullText.append(content);
                 this.writeSseData(outputStream, content);
                 if (!this.clientDisconnected) continue;
-                log.info("\u3010\u6d41\u5f0f\u3011\u5ba2\u6237\u7aef\u65ad\u8fde\uff0cAI\u7ee7\u7eed\u751f\u6210\u81f3\u5b8c\u6210");
+                log.info("【流式】客户端断连，AI继续生成至完成");
             }
         }
         catch (BusincessException e) {
@@ -2653,17 +2653,17 @@ implements ChatService {
     @Transactional(rollbackFor={Exception.class})
     public String saveGeneratedPlan(Long userId, String type, String content) {
         if (userId == null || content == null || content.isBlank()) {
-            throw new BusincessException(StateCode.PARAMS_ERROR, "\u6ca1\u6709\u53ef\u4fdd\u5b58\u7684\u8ba1\u5212\u5185\u5bb9");
+            throw new BusincessException(StateCode.PARAMS_ERROR, "没有可保存的计划内容");
         }
         if ("training".equals(type)) {
             this.saveGeneratedTrainingPlan(userId, content);
-            return "\u8bad\u7ec3\u8ba1\u5212\u5df2\u4fdd\u5b58";
+            return "训练计划已保存";
         }
         if ("diet".equals(type)) {
             this.saveGeneratedDietPlan(userId, content);
-            return "\u996e\u98df\u8ba1\u5212\u5df2\u4fdd\u5b58";
+            return "饮食计划已保存";
         }
-        throw new BusincessException(StateCode.PARAMS_ERROR, "\u4e0d\u652f\u6301\u7684\u8ba1\u5212\u7c7b\u578b");
+        throw new BusincessException(StateCode.PARAMS_ERROR, "不支持的计划类型");
     }
 
     private void saveOrUpdateChatHistory(Long userId, String userMessage, String aiResponse) {
@@ -2677,7 +2677,7 @@ implements ChatService {
                 existing.setEmotionalState(emotionalState);
             }
             List<String> buffer = this.parseJsonArray(existing.getPendingMessages());
-            buffer.add("\u7528\u6237\uff1a" + userMessage + "\n\u52a9\u624b\uff1a" + aiResponse);
+            buffer.add("用户：" + userMessage + "\n助手：" + aiResponse);
             if (buffer.size() > 10) {
                 buffer = new ArrayList<String>(buffer.subList(buffer.size() - 10, buffer.size()));
             }
@@ -2694,7 +2694,7 @@ implements ChatService {
                 existing.setPendingMessages(JSON_MAPPER.writeValueAsString(buffer));
             }
             catch (Exception e) {
-                log.warn("\u5e8f\u5217\u5316pendingMessages\u5931\u8d25", (Throwable)e);
+                log.warn("序列化pendingMessages失败", (Throwable)e);
             }
             this.chatHistoryMapper.updateById(existing);
         } else {
@@ -2703,10 +2703,10 @@ implements ChatService {
             chatHistory.setMessageCount(1);
             chatHistory.setEmotionalState(emotionalState);
             try {
-                chatHistory.setPendingMessages(JSON_MAPPER.writeValueAsString(List.of("\u7528\u6237\uff1a" + userMessage + "\n\u52a9\u624b\uff1a" + aiResponse)));
+                chatHistory.setPendingMessages(JSON_MAPPER.writeValueAsString(List.of("用户：" + userMessage + "\n助手：" + aiResponse)));
             }
             catch (Exception e) {
-                log.warn("\u5e8f\u5217\u5316pendingMessages\u5931\u8d25", (Throwable)e);
+                log.warn("序列化pendingMessages失败", (Throwable)e);
             }
             this.chatHistoryMapper.insert(chatHistory);
         }
@@ -2715,19 +2715,19 @@ implements ChatService {
     private void saveGeneratedTrainingPlan(Long userId, String content) {
         List<ParsedTrainingDay> days = this.parseTrainingPlanText(content);
         if (days.isEmpty()) {
-            throw new BusincessException(StateCode.PARAMS_ERROR, "\u8bad\u7ec3\u8ba1\u5212\u683c\u5f0f\u65e0\u6cd5\u8bc6\u522b");
+            throw new BusincessException(StateCode.PARAMS_ERROR, "训练计划格式无法识别");
         }
         ArrayList<String> unresolvedActions = new ArrayList<String>();
         ArrayList<SaveUserTrainingCycleRequest.CycleDayDTO> cycleDays = new ArrayList<SaveUserTrainingCycleRequest.CycleDayDTO>();
         for (int i = 0; i < 7; ++i) {
-            ParsedTrainingDay day = i < days.size() ? days.get(i) : new ParsedTrainingDay(i + 1, "\u661f\u671f" + DAY_NAMES[i], "", true, List.of(), List.of(), List.of());
+            ParsedTrainingDay day = i < days.size() ? days.get(i) : new ParsedTrainingDay(i + 1, "星期" + DAY_NAMES[i], "", true, List.of(), List.of(), List.of());
             SaveUserTrainingCycleRequest.CycleDayDTO dayDTO = new SaveUserTrainingCycleRequest.CycleDayDTO();
             dayDTO.setDayIndex(i + 1);
             if (!day.rest()) {
                 SaveUserTrainingTemplateRequest.TrainingItemDTO dto;
                 Long exerciseId;
                 SaveUserTrainingTemplateRequest req = new SaveUserTrainingTemplateRequest();
-                String tplName = day.muscleGroup().isBlank() ? "\u8bad\u7ec3\u65e5" + (i + 1) : "AI" + day.muscleGroup() + "\u65e5";
+                String tplName = day.muscleGroup().isBlank() ? "训练日" + (i + 1) : "AI" + day.muscleGroup() + "日";
                 req.setName(tplName);
                 ArrayList<SaveUserTrainingTemplateRequest.TrainingItemDTO> items = new ArrayList<SaveUserTrainingTemplateRequest.TrainingItemDTO>();
                 int sort = 0;
@@ -2776,9 +2776,9 @@ implements ChatService {
             cycleDays.add(dayDTO);
         }
         if (!unresolvedActions.isEmpty()) {
-            log.warn("\u3010\u4fdd\u5b58\u8bad\u7ec3\u8ba1\u5212\u3011\u4ee5\u4e0b\u52a8\u4f5c\u672a\u547d\u4e2d\u52a8\u4f5c\u5e93\uff0c\u5df2\u8df3\u8fc7\uff1a{}", (Object)unresolvedActions.stream().distinct().collect(Collectors.joining("\u3001")));
+            log.warn("【保存训练计划】以下动作未命中动作库，已跳过：{}", (Object)unresolvedActions.stream().distinct().collect(Collectors.joining("、")));
         }
-        String prefix = "AI\u8bad\u7ec3\u5468\u6a21\u677f";
+        String prefix = "AI训练周模板";
         int maxNum = 0;
         for (UserTrainingCycleVO c : this.userTrainingCycleService.listCycles(userId)) {
             String n = c.getName();
@@ -2801,7 +2801,7 @@ implements ChatService {
     private void saveGeneratedDietPlan(Long userId, String content) {
         Map<String, String> meals = this.parseDietPlanText(content);
         if (meals.isEmpty()) {
-            throw new BusincessException(StateCode.PARAMS_ERROR, "\u996e\u98df\u8ba1\u5212\u683c\u5f0f\u65e0\u6cd5\u8bc6\u522b");
+            throw new BusincessException(StateCode.PARAMS_ERROR, "饮食计划格式无法识别");
         }
         LinkedHashMap<String, Long> mealConfig = new LinkedHashMap<String, Long>();
         for (String mealType : PLAN_MEAL_ORDER) {
@@ -2809,7 +2809,7 @@ implements ChatService {
             String foodLine = meals.get(mealType);
             if (foodLine == null || foodLine.isBlank() || (parsedFoods = this.parseDietFoodLine(foodLine)).isEmpty()) continue;
             SaveUserDietTemplateRequest req = new SaveUserDietTemplateRequest();
-            req.setName("AI" + mealType + "\u6a21\u677f");
+            req.setName("AI" + mealType + "模板");
             req.setMealType(mealType);
             ArrayList<SaveUserDietTemplateRequest.DietTemplateItemDTO> items = new ArrayList<SaveUserDietTemplateRequest.DietTemplateItemDTO>();
             int sort = 0;
@@ -2827,13 +2827,13 @@ implements ChatService {
             mealConfig.put(mealType, templateId);
         }
         if (mealConfig.isEmpty()) {
-            throw new BusincessException(StateCode.PARAMS_ERROR, "\u996e\u98df\u8ba1\u5212\u4e2d\u6ca1\u6709\u53ef\u4fdd\u5b58\u7684\u9910\u6b21");
+            throw new BusincessException(StateCode.PARAMS_ERROR, "饮食计划中没有可保存的餐次");
         }
         SaveUserDietDayTemplateRequest dayTemplateRequest = new SaveUserDietDayTemplateRequest();
-        dayTemplateRequest.setName("AI\u4e00\u65e5\u996e\u98df");
+        dayTemplateRequest.setName("AI一日饮食");
         dayTemplateRequest.setMealConfig(mealConfig);
         Long dayTemplateId = this.userDietDayTemplateService.saveDayTemplate(userId, dayTemplateRequest);
-        String dietPrefix = "AI\u996e\u98df\u5468\u6a21\u677f";
+        String dietPrefix = "AI饮食周模板";
         int dietMaxNum = 0;
         for (UserDietCycleVO c : this.userDietCycleService.listCycles(userId)) {
             String n = c.getName();
@@ -2857,21 +2857,21 @@ implements ChatService {
 
     private List<ParsedTrainingDay> parseTrainingPlanText(String content) {
         ArrayList<ParsedTrainingDay> result = new ArrayList<ParsedTrainingDay>();
-        Pattern pattern = Pattern.compile("\u661f\u671f([\u4e00\u4e8c\u4e09\u56db\u4e94\u516d\u65e5\u5929])(?:\uff08([^\uff09]*)\uff09)?\\s*(.*?)(?=\u661f\u671f[\u4e00\u4e8c\u4e09\u56db\u4e94\u516d\u65e5\u5929](?:\uff08[^\uff09]*\uff09)?|$)", 32);
+        Pattern pattern = Pattern.compile("星期([一二三四五六日天])(?:（([^）]*)）)?\\s*(.*?)(?=星期[一二三四五六日天](?:（[^）]*）)?|$)", 32);
         Matcher matcher = pattern.matcher(content);
         while (matcher.find()) {
             String dayChar = matcher.group(1);
             String muscle = this.safeTrim(matcher.group(2));
             String body = this.safeTrim(matcher.group(3));
-            String title = "\u661f\u671f" + dayChar + (String)(muscle.isBlank() ? "" : " \u00b7 " + muscle);
+            String title = "星期" + dayChar + (String)(muscle.isBlank() ? "" : " · " + muscle);
             List<String> warmups = List.of();
             List<String> trainings = List.of();
             List<String> stretches = List.of();
-            boolean rest = body.contains("\u4f11\u606f");
+            boolean rest = body.contains("休息");
             if (!rest) {
-                warmups = this.parseActionLine(body, "\u70ed\u8eab");
-                trainings = this.parseActionLine(body, "\u8bad\u7ec3");
-                stretches = this.parseActionLine(body, "\u62c9\u4f38");
+                warmups = this.parseActionLine(body, "热身");
+                trainings = this.parseActionLine(body, "训练");
+                stretches = this.parseActionLine(body, "拉伸");
             }
             result.add(new ParsedTrainingDay(result.size() + 1, title, muscle, rest, warmups, trainings, stretches));
         }
@@ -2880,7 +2880,7 @@ implements ChatService {
 
     private Map<String, String> parseDietPlanText(String content) {
         LinkedHashMap<String, String> sections = new LinkedHashMap<String, String>();
-        Pattern mdPattern = Pattern.compile("\\|\\s*([^|]*?(?:\u65e9\u9910|\u5348\u9910|\u665a\u9910|\u7ec3\u540e|\u52a0\u9910)[^|]*?)\\s*\\|\\s*(.*?)\\s*\\|");
+        Pattern mdPattern = Pattern.compile("\\|\\s*([^|]*?(?:早餐|午餐|晚餐|练后|加餐)[^|]*?)\\s*\\|\\s*(.*?)\\s*\\|");
         Matcher mdMatcher = mdPattern.matcher(content);
         while (mdMatcher.find()) {
             String mealCell = this.safeTrim(mdMatcher.group(1)).replaceAll("[\\p{So}\\p{Sc}]", "").trim();
@@ -2901,7 +2901,7 @@ implements ChatService {
                     currentMeal = normalizedMeal;
                     continue;
                 }
-                if (currentMeal == null || !line.startsWith("\u5403\u4ec0\u4e48")) continue;
+                if (currentMeal == null || !line.startsWith("吃什么")) continue;
                 int idx = line.indexOf(65306);
                 if (idx < 0) {
                     idx = line.indexOf(58);
@@ -2915,7 +2915,7 @@ implements ChatService {
     }
 
     private List<String> parseActionLine(String body, String label) {
-        Pattern stdPattern = Pattern.compile(label + "[\uff1a:](.*?)(?:\\n|$)");
+        Pattern stdPattern = Pattern.compile(label + "[：:](.*?)(?:\\n|$)");
         Matcher stdMatcher = stdPattern.matcher(body);
         if (stdMatcher.find()) {
             String raw = this.safeTrim(stdMatcher.group(1));
@@ -2935,9 +2935,9 @@ implements ChatService {
         if (raw.isBlank()) {
             return List.of();
         }
-        raw = raw.replaceAll("[\uff08(][^\uff09)]*[\uff09)]", "");
+        raw = raw.replaceAll("[（(][^）)]*[）)]", "");
         ArrayList<String> result = new ArrayList<String>();
-        for (String part : parts = raw.split("[\u3001\uff0c,+\uff0b\uff1b;|]")) {
+        for (String part : parts = raw.split("[、，,+＋；;|]")) {
             String action = this.normalizeActionName(part);
             if (action.isBlank()) continue;
             result.add(action);
@@ -2948,10 +2948,10 @@ implements ChatService {
     private List<ParsedFoodAmount> parseDietFoodLine(String line) {
         String[] parts;
         ArrayList<ParsedFoodAmount> result = new ArrayList<ParsedFoodAmount>();
-        for (String rawPart : parts = line.split("[+\uff0b]")) {
+        for (String rawPart : parts = line.split("[+＋]")) {
             Matcher matcher;
             String part = this.sanitizeDietRecordText(rawPart);
-            if (part.isBlank() || !(matcher = Pattern.compile("(.+?)(\\d+(?:\\.\\d+)?)(kg|g|ml|l|\u4e2a|\u7247|\u6839|\u888b|\u4efd|\u53ea|\u679a)$").matcher(part.replaceAll("\\s+", ""))).find()) continue;
+            if (part.isBlank() || !(matcher = Pattern.compile("(.+?)(\\d+(?:\\.\\d+)?)(kg|g|ml|l|个|片|根|袋|份|只|枚)$").matcher(part.replaceAll("\\s+", ""))).find()) continue;
             String name = this.sanitizeDietRecordText(matcher.group(1));
             BigDecimal amount = new BigDecimal(matcher.group(2));
             String unit = matcher.group(3);
@@ -3070,11 +3070,11 @@ implements ChatService {
             entity.setIsActive(1);
             entity.setSortOrder(0);
             this.exerciseService.save(entity);
-            log.info("[WebSearch][Exercise] \u65b0\u52a8\u4f5c\u5165\u5e93: name={}, muscleGroup={}", (Object)name, (Object)entity.getMuscleGroup());
+            log.info("[WebSearch][Exercise] 新动作入库: name={}, muscleGroup={}", (Object)name, (Object)entity.getMuscleGroup());
             return entity;
         }
         catch (Exception e) {
-            log.warn("[WebSearch][Exercise] \u641c\u7d22\u5e76\u4fdd\u5b58\u52a8\u4f5c\u5931\u8d25: exerciseName={}, error={}", (Object)exerciseName, (Object)e.getMessage());
+            log.warn("[WebSearch][Exercise] 搜索并保存动作失败: exerciseName={}, error={}", (Object)exerciseName, (Object)e.getMessage());
             return null;
         }
     }
@@ -3092,21 +3092,21 @@ implements ChatService {
             }
             Map map = (Map)JSON_MAPPER.readValue(json, Map.class);
             StringBuilder sb = new StringBuilder();
-            sb.append("\u52a8\u4f5c\u540d\uff1a").append(this.toCleanString(map.getOrDefault("name", exerciseName))).append("\n");
-            sb.append("\u8bad\u7ec3\u90e8\u4f4d\uff1a").append(this.toCleanString(map.get("muscleGroup"))).append("\n");
-            sb.append("\u6240\u9700\u5668\u68b0\uff1a").append(this.toCleanString(map.get("equipment"))).append("\n");
-            sb.append("\u96be\u5ea6\uff1a").append(this.toCleanString(map.get("difficulty"))).append("\n");
+            sb.append("动作名：").append(this.toCleanString(map.getOrDefault("name", exerciseName))).append("\n");
+            sb.append("训练部位：").append(this.toCleanString(map.get("muscleGroup"))).append("\n");
+            sb.append("所需器械：").append(this.toCleanString(map.get("equipment"))).append("\n");
+            sb.append("难度：").append(this.toCleanString(map.get("difficulty"))).append("\n");
             Object stepsObj = map.get("steps");
             if (stepsObj instanceof List) {
                 List steps = (List)stepsObj;
-                sb.append("\u52a8\u4f5c\u6b65\u9aa4\uff1a\n");
+                sb.append("动作步骤：\n");
                 for (int i = 0; i < steps.size(); ++i) {
                     sb.append(i + 1).append(". ").append(steps.get(i)).append("\n");
                 }
             }
             if ((tipsObj = map.get("tips")) instanceof List) {
                 List tips = (List)tipsObj;
-                sb.append("\u6ce8\u610f\u4e8b\u9879\uff1a\n");
+                sb.append("注意事项：\n");
                 for (Object tip : tips) {
                     sb.append("- ").append(tip).append("\n");
                 }
@@ -3114,7 +3114,7 @@ implements ChatService {
             return sb.toString().trim();
         }
         catch (Exception e) {
-            log.warn("[WebSearch][Exercise] \u641c\u7d22\u52a8\u4f5c\u4fe1\u606f\u5931\u8d25: exerciseName={}, error={}", (Object)exerciseName, (Object)e.getMessage());
+            log.warn("[WebSearch][Exercise] 搜索动作信息失败: exerciseName={}, error={}", (Object)exerciseName, (Object)e.getMessage());
             return null;
         }
     }
@@ -3123,7 +3123,7 @@ implements ChatService {
         if (query == null || query.isBlank()) {
             return null;
         }
-        String name = query.replaceAll("(\u600e\u4e48\u505a|\u600e\u4e48\u7ec3|\u662f\u4ec0\u4e48|\u52a8\u4f5c\u8981\u9886|\u6b63\u786e\u59ff\u52bf|\u6559\u7a0b|\u65b9\u6cd5|\u8bad\u7ec3\u65b9\u6cd5|\u600e\u4e48|\u5982\u4f55|\u662f\u4ec0\u4e48\u610f\u601d|\u6709\u4ec0\u4e48\u7528|\u597d\u4e0d\u597d|\u6548\u679c|\u53ef\u4ee5\u5417|\u80fd.*\u5417).*$", "").trim();
+        String name = query.replaceAll("(怎么做|怎么练|是什么|动作要领|正确姿势|教程|方法|训练方法|怎么|如何|是什么意思|有什么用|好不好|效果|可以吗|能.*吗).*$", "").trim();
         if (name.isBlank()) {
             return null;
         }
@@ -3136,7 +3136,7 @@ implements ChatService {
     private Long resolveFoodIdForPlan(Long userId, String rawName, BigDecimal amount, String unit) {
         String name = this.safeTrim(rawName);
         if (name.isBlank()) {
-            throw new BusincessException(StateCode.PARAMS_ERROR, "\u996e\u98df\u8ba1\u5212\u91cc\u5b58\u5728\u7a7a\u98df\u7269\u540d");
+            throw new BusincessException(StateCode.PARAMS_ERROR, "饮食计划里存在空食物名");
         }
         List<FoodItem> candidates = this.foodItemService.searchVisibleFoods(userId, name);
         FoodItem matched = candidates.stream().filter(item -> item.getName() != null && item.getName().equalsIgnoreCase(name)).findFirst().orElseGet(() -> candidates.stream().filter(item -> item.getName() != null && (item.getName().contains(name) || name.contains(item.getName()))).findFirst().orElse(null));
@@ -3161,22 +3161,22 @@ implements ChatService {
 
     private String resolveMuscleGroupKey(String muscleGroup, String fallbackName) {
         String text = (this.safeTrim(muscleGroup) + " " + this.safeTrim(fallbackName)).toLowerCase();
-        if (text.contains("\u80f8")) {
+        if (text.contains("胸")) {
             return "chest";
         }
-        if (text.contains("\u80cc")) {
+        if (text.contains("背")) {
             return "back";
         }
-        if (text.contains("\u817f")) {
+        if (text.contains("腿")) {
             return "legs";
         }
-        if (text.contains("\u80a9")) {
+        if (text.contains("肩")) {
             return "shoulders";
         }
-        if (text.contains("\u81c2") || text.contains("\u4e8c\u5934") || text.contains("\u4e09\u5934")) {
+        if (text.contains("臂") || text.contains("二头") || text.contains("三头")) {
             return "arms";
         }
-        if (text.contains("\u8179") || text.contains("\u6838\u5fc3")) {
+        if (text.contains("腹") || text.contains("核心")) {
             return "core";
         }
         return "core";
@@ -3184,9 +3184,9 @@ implements ChatService {
 
     private String normalizeActionName(String raw) {
         String text = this.sanitizeExerciseRecordText(raw);
-        text = text.replaceAll("[\uff08(].*?[\uff09)]", "");
-        text = text.replaceAll("\\d+(?:\\.\\d+)?\\s*(\u5206\u949f|min|\u79d2|s|\u5c0f\u65f6|h|\u7ec4|\u6b21)$", "");
-        text = text.replaceAll("\u9759\u6001\u62c9\u4f38$", "\u62c9\u4f38");
+        text = text.replaceAll("[（(].*?[）)]", "");
+        text = text.replaceAll("\\d+(?:\\.\\d+)?\\s*(分钟|min|秒|s|小时|h|组|次)$", "");
+        text = text.replaceAll("静态拉伸$", "拉伸");
         return this.safeTrim(text);
     }
 
@@ -3196,9 +3196,9 @@ implements ChatService {
             return "";
         }
         text = this.stripLeadingRecordPhrases(text);
-        text = text.replaceAll("^(?:\u6211|\u4eca\u5929|\u521a\u521a|\u521a\u624d|\u521a|\u5df2\u7ecf|\u5df2\u7ecf\u5728)?(?:\u505a\u4e86|\u7ec3\u4e86|\u8dd1\u4e86|\u8d70\u4e86|\u9a91\u4e86)", "");
-        text = text.replaceAll("^(?:\u8fdb\u884c|\u5b8c\u6210)(?:\u4e86)?", "");
-        text = text.replaceAll("[\u3002\uff01!\uff0c,\uff1b;\u3001\\s]+$", "");
+        text = text.replaceAll("^(?:我|今天|刚刚|刚才|刚|已经|已经在)?(?:做了|练了|跑了|走了|骑了)", "");
+        text = text.replaceAll("^(?:进行|完成)(?:了)?", "");
+        text = text.replaceAll("[。！!，,；;、\\s]+$", "");
         return this.safeTrim(text);
     }
 
@@ -3208,10 +3208,10 @@ implements ChatService {
             return "";
         }
         text = this.stripLeadingRecordPhrases(text);
-        text = text.replaceAll("^(?:\u6211|\u4eca\u5929|\u521a\u521a|\u521a\u624d|\u521a|\u5df2\u7ecf)?(?:\u65e9\u9910|\u5348\u9910|\u5348\u996d|\u665a\u9910|\u665a\u996d|\u52a0\u9910|\u591c\u5bb5|\u5bb5\u591c)?(?:\u5403\u4e86|\u559d\u4e86|\u5403\u8fc7|\u559d\u8fc7)", "");
-        text = text.replaceAll("^(?:\u6211|\u4eca\u5929|\u521a\u521a|\u521a\u624d|\u521a|\u5df2\u7ecf)?(?:\u5403\u4e86|\u559d\u4e86|\u5403\u8fc7|\u559d\u8fc7)", "");
-        text = text.replaceAll("^(?:\u65e9\u9910|\u5348\u9910|\u5348\u996d|\u665a\u9910|\u665a\u996d|\u52a0\u9910|\u591c\u5bb5|\u5bb5\u591c)[:\uff1a]?", "");
-        text = text.replaceAll("[\u3002\uff01!\uff0c,\uff1b;\u3001\\s]+$", "");
+        text = text.replaceAll("^(?:我|今天|刚刚|刚才|刚|已经)?(?:早餐|午餐|午饭|晚餐|晚饭|加餐|夜宵|宵夜)?(?:吃了|喝了|吃过|喝过)", "");
+        text = text.replaceAll("^(?:我|今天|刚刚|刚才|刚|已经)?(?:吃了|喝了|吃过|喝过)", "");
+        text = text.replaceAll("^(?:早餐|午餐|午饭|晚餐|晚饭|加餐|夜宵|宵夜)[:：]?", "");
+        text = text.replaceAll("[。！!，,；;、\\s]+$", "");
         return this.safeTrim(text);
     }
 
@@ -3223,8 +3223,8 @@ implements ChatService {
         }
         do {
             previous = text;
-            text = text.replaceAll("^(?:\u8bf7|\u9ebb\u70e6|\u5e2e\u5fd9)?(?:\u5e2e\u6211|\u7ed9\u6211)?(?:\u8bb0\u5f55\u4e00\u4e0b|\u8bb0\u5f55\u4e0b|\u8bb0\u5f55|\u8bb0\u4e00\u4e0b|\u8bb0\u4e0b|\u8bb0\u4e00\u7b14|\u4fdd\u5b58\u4e00\u4e0b|\u4fdd\u5b58\u4e0b)\\s*", "");
-        } while (!previous.equals(text = text.replaceAll("^(?:\u8bf7|\u9ebb\u70e6|\u5e2e\u5fd9)?(?:\u628a|\u5c06)?\\s*", "")));
+            text = text.replaceAll("^(?:请|麻烦|帮忙)?(?:帮我|给我)?(?:记录一下|记录下|记录|记一下|记下|记一笔|保存一下|保存下)\\s*", "");
+        } while (!previous.equals(text = text.replaceAll("^(?:请|麻烦|帮忙)?(?:把|将)?\\s*", "")));
         return this.safeTrim(text);
     }
 
@@ -3233,7 +3233,7 @@ implements ChatService {
         if (text.isBlank()) {
             return null;
         }
-        Matcher matcher = Pattern.compile("(\\d{1,2})\\s*\u7ec4").matcher(text);
+        Matcher matcher = Pattern.compile("(\\d{1,2})\\s*组").matcher(text);
         if (matcher.find()) {
             return this.parseInteger(matcher.group(1));
         }
@@ -3245,17 +3245,17 @@ implements ChatService {
         if (text.isBlank()) {
             return null;
         }
-        Matcher hourMinuteMatcher = Pattern.compile("(\\d{1,2})\\s*(?:\u5c0f\u65f6|h|H)\\s*(\\d{1,2})?\\s*(?:\u5206\u949f|min)?").matcher(text);
+        Matcher hourMinuteMatcher = Pattern.compile("(\\d{1,2})\\s*(?:小时|h|H)\\s*(\\d{1,2})?\\s*(?:分钟|min)?").matcher(text);
         if (hourMinuteMatcher.find()) {
             int hours = Integer.parseInt(hourMinuteMatcher.group(1));
             int minutes = hourMinuteMatcher.group(2) == null ? 0 : Integer.parseInt(hourMinuteMatcher.group(2));
             return hours * 3600 + minutes * 60;
         }
-        Matcher minuteMatcher = Pattern.compile("(\\d{1,4})\\s*(?:\u5206\u949f|min)").matcher(text);
+        Matcher minuteMatcher = Pattern.compile("(\\d{1,4})\\s*(?:分钟|min)").matcher(text);
         if (minuteMatcher.find()) {
             return Integer.parseInt(minuteMatcher.group(1)) * 60;
         }
-        Matcher secondMatcher = Pattern.compile("(\\d{1,5})\\s*(?:\u79d2\u949f|\u79d2|s|S)").matcher(text);
+        Matcher secondMatcher = Pattern.compile("(\\d{1,5})\\s*(?:秒钟|秒|s|S)").matcher(text);
         if (secondMatcher.find()) {
             return Integer.parseInt(secondMatcher.group(1));
         }
@@ -3268,20 +3268,20 @@ implements ChatService {
 
     private String generateSummary(String userMessage, String aiResponse) {
         try {
-            String prompt = "\u603b\u7ed3\u4ee5\u4e0b\u5bf9\u8bdd\uff0c\u4fdd\u7559\u9700\u6c42\u3001\u5efa\u8bae\u8981\u70b9\u3001\u540e\u7eed\u5173\u6ce8\u70b9\uff0c\u2264200\u5b57\uff0c\u53bb\u6389\u5bd2\u6684\u3002\n\u7528\u6237\uff1a" + userMessage + "\n\u52a9\u624b\uff1a" + aiResponse;
+            String prompt = "总结以下对话，保留需求、建议要点、后续关注点，≤200字，去掉寒暄。\n用户：" + userMessage + "\n助手：" + aiResponse;
             String result = this.callAiSingle(prompt, 300, 0.3);
             if (result != null && !result.isBlank()) {
                 return result.trim();
             }
         }
         catch (Exception e) {
-            log.error("\u751f\u6210\u5bf9\u8bdd\u603b\u7ed3\u5931\u8d25", (Throwable)e);
+            log.error("生成对话总结失败", (Throwable)e);
         }
-        StringBuilder fallback = new StringBuilder("\u5bf9\u8bdd\u6458\u8981(\u81ea\u52a8\u751f\u6210)\uff1a\n");
+        StringBuilder fallback = new StringBuilder("对话摘要(自动生成)：\n");
         String[] lines = aiResponse.split("\n");
         for (int i = 0; i < lines.length && fallback.length() < 400; ++i) {
             String line = lines[i];
-            if (!line.startsWith("\u7528\u6237\uff1a") && !line.startsWith("\u52a9\u624b\uff1a")) continue;
+            if (!line.startsWith("用户：") && !line.startsWith("助手：")) continue;
             fallback.append(line, 0, Math.min(line.length(), 60)).append("...\n");
         }
         return fallback.toString();
@@ -3299,16 +3299,16 @@ implements ChatService {
         List<Map<String, Object>> sessions;
         List<Map<String, Object>> list = sessions = userId == null ? Collections.emptyList() : this.exerciseRecordService.listLegacyRecords(userId, LocalDate.now(CN_ZONE));
         if (sessions.isEmpty()) {
-            return "\u65e0\u8bad\u7ec3\u8bb0\u5f55";
+            return "无训练记录";
         }
         StringBuilder sb = new StringBuilder();
         for (Map<String, Object> session : sessions) {
             String sessionName = this.toCleanString(session.get("name"));
             Integer sessionDuration = this.parseInteger(session.get("durationSeconds"));
             if (!sessionName.isBlank()) {
-                sb.append("\u8bad\u7ec3\uff1a").append(sessionName);
+                sb.append("训练：").append(sessionName);
                 if (sessionDuration != null && sessionDuration > 0) {
-                    sb.append("\uff0c").append(Math.max(1, sessionDuration / 60)).append("\u5206\u949f");
+                    sb.append("，").append(Math.max(1, sessionDuration / 60)).append("分钟");
                 }
                 sb.append("\n");
             }
@@ -3320,25 +3320,25 @@ implements ChatService {
                 if (name.isBlank()) continue;
                 sb.append("- ").append(name);
                 if (!muscleGroup.isBlank()) {
-                    sb.append("\uff08").append(muscleGroup).append("\uff09");
+                    sb.append("（").append(muscleGroup).append("）");
                 }
                 if (completedSets != null) {
-                    sb.append("\uff0c").append(completedSets).append("\u7ec4");
+                    sb.append("，").append(completedSets).append("组");
                 }
                 if (durationSeconds != null && durationSeconds > 0) {
-                    sb.append("\uff0c").append(Math.max(1, durationSeconds / 60)).append("\u5206\u949f");
+                    sb.append("，").append(Math.max(1, durationSeconds / 60)).append("分钟");
                 }
                 sb.append("\n");
             }
         }
-        return sb.length() == 0 ? "\u65e0\u8bad\u7ec3\u8bb0\u5f55" : sb.toString().trim();
+        return sb.length() == 0 ? "无训练记录" : sb.toString().trim();
     }
 
     private String buildTodaySummaryDietInput(Long userId) {
         List<Map<String, Object>> dietRecords;
         List<Map<String, Object>> list = dietRecords = userId == null ? Collections.emptyList() : this.dietRecordService.listLegacyRecords(userId, LocalDate.now(CN_ZONE));
         if (dietRecords.isEmpty()) {
-            return "\u65e0\u996e\u98df\u8bb0\u5f55";
+            return "无饮食记录";
         }
         StringBuilder sb = new StringBuilder();
         for (Map<String, Object> item : dietRecords) {
@@ -3347,12 +3347,12 @@ implements ChatService {
             if (name.isBlank()) continue;
             sb.append("- ");
             if (!mealType.isBlank()) {
-                sb.append(mealType).append("\uff1a");
+                sb.append(mealType).append("：");
             }
             sb.append(name);
             sb.append("\n");
         }
-        return sb.length() == 0 ? "\u65e0\u996e\u98df\u8bb0\u5f55" : sb.toString().trim();
+        return sb.length() == 0 ? "无饮食记录" : sb.toString().trim();
     }
 
     private String summarizeDailyRecord(Long userId, User user, String todayPlanSection) {
@@ -3361,19 +3361,19 @@ implements ChatService {
         boolean noUserRecord = !hasExerciseRecord && !hasDietRecord;
         try {
             String userInfo = this.buildUserInfo(user);
-            String prompt = noUserRecord ? "\u4f60\u662f\u5065\u8eab\u52a9\u624bTatan\u3002\u7528\u6237\u4eca\u5929\u6ca1\u6709\u8bb0\u5f55\u4efb\u4f55\u8fd0\u52a8\u548c\u996e\u98df\uff0c\u4f46\u7cfb\u7edf\u67e5\u5230\u4e86\u4eca\u5929\u7684\u8bad\u7ec3\u8ba1\u5212\u3002\n\n\u8bf7\u751f\u6210\u4e00\u4efd\u4e0e\u6570\u636e\u5e93\u5b58\u50a8\u683c\u5f0f\u4e00\u81f4\u7684\u63d0\u9192\u603b\u7ed3\u3002\n\u7eaf\u6587\u672c\u4e0d\u7528markdown\uff0c\u603b\u5b57\u6570\u9650\u5236\u5728220\u5b57\u4ee5\u5185\uff0c\u4e25\u683c\u6309\u4ee5\u4e0b\u683c\u5f0f\u8f93\u51fa\uff1a\n\u603b\u7ed3\uff1a\u4e00\u53e5\u8bdd\u6982\u62ec\u4eca\u5929\u5e94\u5b8c\u6210\u7684\u5b89\u6392\u3002\n\u5efa\u8bae\uff1a\u7ed9\u51fa1\u6761\u6700\u503c\u5f97\u6267\u884c\u7684\u5efa\u8bae\uff0c\u5e76\u81ea\u7136\u5e26\u4e0a\u201c\u4eca\u5929\u8fd8\u6ca1\u8bb0\u5f55\u54e6\u201d\u3002\n\u8bad\u7ec3\uff1a\u7b80\u8981\u5217\u51fa\u4eca\u5929\u5e94\u5b8c\u6210\u7684\u8bad\u7ec3\u5185\u5bb9\u3002\n\u996e\u98df\uff1a\u5199\u201c\u6682\u65e0\u996e\u98df\u8bb0\u5f55\u201d\u3002\n\u95ee\u9898\uff1a\u8bf4\u660e\u65e0\u6cd5\u786e\u8ba4\u662f\u5426\u6309\u8ba1\u5212\u5b8c\u6210\u3002\n\n" + (String)(userInfo.isBlank() ? "" : userInfo + "\n") + "\u3010\u4eca\u5929\u7684\u8bad\u7ec3\u8ba1\u5212\u3011\n" + (todayPlanSection == null ? "" : todayPlanSection.trim()) : "\u4f60\u662f\u5065\u8eab\u52a9\u624bTatan\u3002\u8bf7\u6839\u636e\u7528\u6237\u4eca\u5929\u7684\u7ed3\u6784\u5316\u8fd0\u52a8/\u996e\u98df\u8bb0\u5f55\uff0c\u751f\u6210\u4e00\u4efd\u4e0e\u6570\u636e\u5e93\u5b58\u50a8\u683c\u5f0f\u4e00\u81f4\u7684\u4eca\u65e5\u603b\u7ed3\u3002\n\n\u7eaf\u6587\u672c\u4e0d\u7528markdown\uff0c\u603b\u5b57\u6570\u9650\u5236\u5728220\u5b57\u4ee5\u5185\uff0c\u4e25\u683c\u6309\u4ee5\u4e0b\u683c\u5f0f\u8f93\u51fa\uff1a\n\u603b\u7ed3\uff1a\u4e00\u53e5\u8bdd\u6982\u62ec\u4eca\u5929\u72b6\u6001\u3002\n\u5efa\u8bae\uff1a\u7ed9\u51fa1\u6761\u6700\u503c\u5f97\u6267\u884c\u7684\u5efa\u8bae\u3002\n\u8bad\u7ec3\uff1a\u6982\u62ec\u4eca\u5929\u8bad\u7ec3\u5185\u5bb9\uff0c\u6ca1\u6709\u5219\u5199\u201c\u6682\u65e0\u8bad\u7ec3\u8bb0\u5f55\u201d\u3002\n\u996e\u98df\uff1a\u6982\u62ec\u4eca\u5929\u996e\u98df\u60c5\u51b5\uff0c\u6ca1\u6709\u5219\u5199\u201c\u6682\u65e0\u996e\u98df\u8bb0\u5f55\u201d\u3002\n\u95ee\u9898\uff1a\u5982\u65e0\u660e\u663e\u95ee\u9898\u53ef\u5199\u201c\u65e0\u201d\u3002\n\n\u91cd\u8981\u7ea6\u675f\uff1a\n1. \u53ea\u8981\u3010\u7ed3\u6784\u5316\u8bad\u7ec3\u8bb0\u5f55\u3011\u91cc\u6709\u52a8\u4f5c\u540d\uff0c\u5c31\u4e0d\u80fd\u5199\u201c\u6682\u65e0\u8bad\u7ec3\u8bb0\u5f55\u201d\u3002\n2. \u8bad\u7ec3\u8bb0\u5f55\u91cc\u6ca1\u6709\u65f6\u957f\uff0c\u4e0d\u4ee3\u8868\u6ca1\u6709\u8bad\u7ec3\uff1b\u53ea\u6709\u52a8\u4f5c\u540d\u3001\u808c\u7fa4\u3001\u7ec4\u6570\u4e5f\u5c5e\u4e8e\u6709\u6548\u8bad\u7ec3\u8bb0\u5f55\u3002\n3. \u4e0d\u8981\u56e0\u4e3a\u90e8\u5206\u8bad\u7ec3\u6ca1\u6709\u65f6\u957f\uff0c\u5c31\u5199\u201c0\u5206\u949f\u5f02\u5e38\u201d\u201c\u6570\u636e\u65e0\u6548\u201d\u201c\u6682\u65e0\u8bad\u7ec3\u8bb0\u5f55\u201d\u8fd9\u7c7b\u7ed3\u8bba\u3002\n4. \u4f18\u5148\u4f9d\u636e\u7ed3\u6784\u5316\u8bb0\u5f55\u603b\u7ed3\uff0c\u4e0d\u8981\u88ab\u65e7\u7684\u81ea\u7136\u8bed\u8a00\u6d41\u6c34\u8bef\u5bfc\u3002\n5. \u5982\u679c\u540c\u7c7b\u8bad\u7ec3\u6216\u540c\u4e00\u9910\u660e\u663e\u91cd\u590d\u51fa\u73b0\uff0c\u4f18\u5148\u505a\u5408\u5e76\u6982\u62ec\uff0c\u4e0d\u8981\u673a\u68b0\u9010\u6761\u590d\u8ff0\u3002\n6. \u5982\u679c\u4f60\u5224\u65ad\u5b58\u5728\u91cd\u590d\u8bb0\u5f55\u3001\u7591\u4f3c\u91cd\u590d\u6253\u5361\u3001\u9910\u6b21\u91cd\u590d\u7b49\u60c5\u51b5\uff0c\u53ef\u4ee5\u5728\u201c\u95ee\u9898\uff1a\u201d\u91cc\u7b80\u77ed\u6307\u51fa\uff0c\u4f46\u4e0d\u8981\u5938\u5927\u6210\u9519\u8bef\u3002\n7. \u201c\u8bad\u7ec3\uff1a\u201d\u548c\u201c\u996e\u98df\uff1a\u201d\u8981\u5199\u6210\u6982\u62ec\u540e\u7684\u81ea\u7136\u8bed\u8a00\uff0c\u4e0d\u8981\u7b80\u5355\u6284\u539f\u59cb\u5217\u8868\u3002\n\n" + (String)(userInfo.isBlank() ? "" : userInfo + "\n") + "\u3010\u7ed3\u6784\u5316\u8bad\u7ec3\u8bb0\u5f55\u3011\n" + this.buildTodaySummaryExerciseInput(userId) + "\n\n\u3010\u7ed3\u6784\u5316\u996e\u98df\u8bb0\u5f55\u3011\n" + this.buildTodaySummaryDietInput(userId);
+            String prompt = noUserRecord ? "你是健身助手Tatan。用户今天没有记录任何运动和饮食，但系统查到了今天的训练计划。\n\n请生成一份与数据库存储格式一致的提醒总结。\n纯文本不用markdown，总字数限制在220字以内，严格按以下格式输出：\n总结：一句话概括今天应完成的安排。\n建议：给出1条最值得执行的建议，并自然带上“今天还没记录哦”。\n训练：简要列出今天应完成的训练内容。\n饮食：写“暂无饮食记录”。\n问题：说明无法确认是否按计划完成。\n\n" + (String)(userInfo.isBlank() ? "" : userInfo + "\n") + "【今天的训练计划】\n" + (todayPlanSection == null ? "" : todayPlanSection.trim()) : "你是健身助手Tatan。请根据用户今天的结构化运动/饮食记录，生成一份与数据库存储格式一致的今日总结。\n\n纯文本不用markdown，总字数限制在220字以内，严格按以下格式输出：\n总结：一句话概括今天状态。\n建议：给出1条最值得执行的建议。\n训练：概括今天训练内容，没有则写“暂无训练记录”。\n饮食：概括今天饮食情况，没有则写“暂无饮食记录”。\n问题：如无明显问题可写“无”。\n\n重要约束：\n1. 只要【结构化训练记录】里有动作名，就不能写“暂无训练记录”。\n2. 训练记录里没有时长，不代表没有训练；只有动作名、肌群、组数也属于有效训练记录。\n3. 不要因为部分训练没有时长，就写“0分钟异常”“数据无效”“暂无训练记录”这类结论。\n4. 优先依据结构化记录总结，不要被旧的自然语言流水误导。\n5. 如果同类训练或同一餐明显重复出现，优先做合并概括，不要机械逐条复述。\n6. 如果你判断存在重复记录、疑似重复打卡、餐次重复等情况，可以在“问题：”里简短指出，但不要夸大成错误。\n7. “训练：”和“饮食：”要写成概括后的自然语言，不要简单抄原始列表。\n\n" + (String)(userInfo.isBlank() ? "" : userInfo + "\n") + "【结构化训练记录】\n" + this.buildTodaySummaryExerciseInput(userId) + "\n\n【结构化饮食记录】\n" + this.buildTodaySummaryDietInput(userId);
             String result = this.callAiSingle(prompt, 300, 0.3);
             if (result != null && !result.isBlank()) {
                 return result.trim();
             }
         }
         catch (Exception e) {
-            log.error("\u751f\u6210\u4eca\u65e5\u8bb0\u5f55\u603b\u7ed3\u5931\u8d25", (Throwable)e);
+            log.error("生成今日记录总结失败", (Throwable)e);
         }
         if (noUserRecord) {
-            return "\u603b\u7ed3\uff1a\u4eca\u5929\u5e94\u6309\u8ba1\u5212\u5b8c\u6210\u8bad\u7ec3\u5b89\u6392\u3002\n\u5efa\u8bae\uff1a\u4eca\u5929\u8fd8\u6ca1\u8bb0\u5f55\u54e6\uff0c\u7ec3\u5b8c\u8bb0\u5f97\u53ca\u65f6\u6253\u5361\u3002\n\u8bad\u7ec3\uff1a\u8bf7\u53c2\u8003\u4eca\u65e5\u8bad\u7ec3\u8ba1\u5212\u3002\n\u996e\u98df\uff1a\u6682\u65e0\u996e\u98df\u8bb0\u5f55\u3002\n\u95ee\u9898\uff1a\u65e0\u6cd5\u786e\u8ba4\u4eca\u5929\u662f\u5426\u6309\u8ba1\u5212\u5b8c\u6210\u3002";
+            return "总结：今天应按计划完成训练安排。\n建议：今天还没记录哦，练完记得及时打卡。\n训练：请参考今日训练计划。\n饮食：暂无饮食记录。\n问题：无法确认今天是否按计划完成。";
         }
-        return "\u603b\u7ed3\uff1a\u4eca\u5929\u5df2\u6709\u8bb0\u5f55\uff0c\u4f46\u603b\u7ed3\u751f\u6210\u5931\u8d25\u3002\n\u5efa\u8bae\uff1a\u53ef\u4ee5\u7a0d\u540e\u518d\u67e5\u770b\u4e00\u6b21\u4eca\u65e5\u603b\u7ed3\u3002\n\u8bad\u7ec3\uff1a\u8bf7\u67e5\u770b\u4eca\u65e5\u539f\u59cb\u8bb0\u5f55\u3002\n\u996e\u98df\uff1a\u8bf7\u67e5\u770b\u4eca\u65e5\u539f\u59cb\u8bb0\u5f55\u3002\n\u95ee\u9898\uff1a\u6682\u65e0\u53ef\u9760\u7ed3\u6784\u5316\u603b\u7ed3\u3002";
+        return "总结：今天已有记录，但总结生成失败。\n建议：可以稍后再查看一次今日总结。\n训练：请查看今日原始记录。\n饮食：请查看今日原始记录。\n问题：暂无可靠结构化总结。";
     }
 
     @Override
@@ -3384,20 +3384,20 @@ implements ChatService {
         if ("training".equals(type)) {
             UserTrainingCycleVO cycle = this.userTrainingCycleService.getActiveCycle(userId);
             if (cycle == null || cycle.getTodayIndex() == null || cycle.getDays() == null || cycle.getDays().isEmpty()) {
-                throw new BusincessException(StateCode.NULL_ERROR, "\u8fd8\u6ca1\u6709\u8bad\u7ec3\u8ba1\u5212");
+                throw new BusincessException(StateCode.NULL_ERROR, "还没有训练计划");
             }
             Map templateMap = this.userTrainingTemplateService.listTemplates(userId).stream().collect(Collectors.toMap(UserTrainingTemplateVO::getId, Function.identity(), (a, b) -> a, LinkedHashMap::new));
             int targetIndex = cycle.getTodayIndex();
             UserTrainingCycleVO.CycleDayVO day = cycle.getDays().stream().filter(d -> d.getDayIndex() != null && d.getDayIndex() == targetIndex).findFirst().orElse(null);
             if (day == null || day.getTemplateId() == null) {
-                throw new BusincessException(StateCode.NULL_ERROR, "\u4eca\u5929\u662f\u4f11\u606f\u65e5\uff0c\u6ca1\u6709\u8bad\u7ec3\u5b89\u6392");
+                throw new BusincessException(StateCode.NULL_ERROR, "今天是休息日，没有训练安排");
             }
             UserTrainingTemplateVO template = (UserTrainingTemplateVO)templateMap.get(day.getTemplateId());
             if (template == null || template.getItems() == null || template.getItems().isEmpty()) {
-                throw new BusincessException(StateCode.NULL_ERROR, "\u4eca\u5929\u7684\u8bad\u7ec3\u8ba1\u5212\u6ca1\u6709\u52a8\u4f5c");
+                throw new BusincessException(StateCode.NULL_ERROR, "今天的训练计划没有动作");
             }
             DayOfWeek dow = today.getDayOfWeek();
-            String note = "\u661f\u671f" + DAY_NAMES[dow.getValue() - 1] + " \u00b7 Day " + targetIndex;
+            String note = "星期" + DAY_NAMES[dow.getValue() - 1] + " · Day " + targetIndex;
             for (UserTrainingTemplateVO.TrainingItemVO item : template.getItems()) {
                 AddExerciseRecordRequest req = new AddExerciseRecordRequest();
                 req.setExerciseId(item.getExerciseId());
@@ -3410,22 +3410,22 @@ implements ChatService {
                 req.setTime(recordTime);
                 this.exerciseRecordService.saveRecord(userId, today, req, "chat");
             }
-            return "\u5df2\u8bb0\u5f55" + (template.getName() != null ? template.getName() : "") + "\u8bad\u7ec3";
+            return "已记录" + (template.getName() != null ? template.getName() : "") + "训练";
         }
         if ("diet".equals(type)) {
             UserDietCycleVO dietCycle = this.userDietCycleService.getActiveCycle(userId);
             if (dietCycle == null || dietCycle.getTodayIndex() == null || dietCycle.getDays() == null || dietCycle.getDays().isEmpty()) {
-                throw new BusincessException(StateCode.NULL_ERROR, "\u8fd8\u6ca1\u6709\u996e\u98df\u8ba1\u5212");
+                throw new BusincessException(StateCode.NULL_ERROR, "还没有饮食计划");
             }
             int targetIndex = dietCycle.getTodayIndex();
             UserDietCycleVO.CycleDayVO day = dietCycle.getDays().stream().filter(d -> d.getDayIndex() != null && d.getDayIndex() == targetIndex).findFirst().orElse(null);
             if (day == null || day.getDayTemplateId() == null) {
-                throw new BusincessException(StateCode.NULL_ERROR, "\u4eca\u5929\u6ca1\u6709\u996e\u98df\u5b89\u6392");
+                throw new BusincessException(StateCode.NULL_ERROR, "今天没有饮食安排");
             }
             List<UserDietDayTemplateVO> dayTemplates = this.userDietDayTemplateService.listDayTemplates(userId);
             UserDietDayTemplateVO dayTpl = dayTemplates.stream().filter(t -> t.getId().equals(day.getDayTemplateId())).findFirst().orElse(null);
             if (dayTpl == null || dayTpl.getMealSlots() == null || dayTpl.getMealSlots().isEmpty()) {
-                throw new BusincessException(StateCode.NULL_ERROR, "\u4eca\u5929\u7684\u996e\u98df\u8ba1\u5212\u6ca1\u6709\u9910\u6b21");
+                throw new BusincessException(StateCode.NULL_ERROR, "今天的饮食计划没有餐次");
             }
             List<UserDietTemplateVO> dietTemplates = this.userDietTemplateService.listTemplates(userId);
             Map dtMap = dietTemplates.stream().collect(Collectors.toMap(UserDietTemplateVO::getId, Function.identity(), (a, b) -> a));
@@ -3451,40 +3451,40 @@ implements ChatService {
                 this.appendDietRecord(userId, this.userRecordService.getByUserId(userId), dietReq);
                 ++savedMeals;
             }
-            return "\u5df2\u8bb0\u5f55" + savedMeals + "\u9910\u996e\u98df";
+            return "已记录" + savedMeals + "餐饮食";
         }
-        throw new BusincessException(StateCode.PARAMS_ERROR, "\u65e0\u6548\u7684\u7c7b\u578b");
+        throw new BusincessException(StateCode.PARAMS_ERROR, "无效的类型");
     }
 
     @Override
     public String generateUserProfile(User user, String profileFormData) {
         try {
             UserProfile profile = this.userProfileService.getByUserId(user.getId());
-            String gender = user.getGender() != null ? (user.getGender() == 0 ? "\u5973" : "\u7537") : "\u672a\u77e5";
-            String userBasic = String.format("\u6027\u522b:%s, \u5e74\u9f84:%s\u5c81, \u8eab\u9ad8:%scm, \u4f53\u91cd:%skg, \u5065\u8eab\u76ee\u6807:%s", gender, user.getAge() != null ? user.getAge() : "\u672a\u586b", user.getHeight() != null ? user.getHeight() : "\u672a\u586b", user.getWeight() != null ? user.getWeight() : "\u672a\u586b", profile != null && profile.getFitnessGoal() != null ? profile.getFitnessGoal() : "\u672a\u586b");
-            String oldProfile = profile != null && profile.getUserProfileText() != null && !profile.getUserProfileText().isBlank() ? profile.getUserProfileText() : "\u6682\u65e0\u753b\u50cf";
-            String prompt = "\u4f60\u662f\u4e00\u4e2aAI\u5065\u8eab\u6559\u7ec3\u7684\u52a9\u624b\u3002\u8bf7\u6839\u636e\u7528\u6237\u7684\u3010\u65e7\u753b\u50cf\u3011\u3001\u3010\u57fa\u672c\u4fe1\u606f\u3011\u548c\u3010\u7528\u6237\u81ea\u586b\u4fe1\u606f\u3011\uff0c\u66f4\u65b0\u7528\u6237\u753b\u50cf\u3002\n\n\u3010\u65e7\u753b\u50cf\u3011" + oldProfile + "\n\u3010\u57fa\u672c\u4fe1\u606f\u3011" + userBasic + "\n\u3010\u7528\u6237\u81ea\u586b\u3011" + profileFormData + "\n\n\u8981\u6c42\uff1a\n- \u628a\u57fa\u672c\u4fe1\u606f\u548c\u81ea\u586b\u4fe1\u606f\u878d\u5408\u5230\u65e7\u753b\u50cf\u4e2d\uff0c\u4e0d\u8981\u5206\u70b9\u7f57\u5217\n- \u4fdd\u7559\u65e7\u753b\u50cf\u4e2d\u4ecd\u7136\u51c6\u786e\u7684\u5185\u5bb9\n- \u7528\u6237\u81ea\u586b\u7684\u4fe1\u606f\u53ef\u80fd\u8868\u8ff0\u4e0d\u6e05\uff0c\u5e2e\u4ed6\u603b\u7ed3\u5230\u4f4d\uff08\u6bd4\u5982\"\u529e\u516c\u5ba4\"\u603b\u7ed3\u4e3a\"\u4e45\u5750\u529e\u516c\"\uff09\n- \u4f24\u75c5/\u996e\u98df\u7981\u5fcc\u5fc5\u987b\u4fdd\u7559\u539f\u610f\uff0c\u4e0d\u80fd\u9057\u6f0f\n- 100\u5b57\u4ee5\u5185\uff0c\u4e0d\u5e9f\u8bdd\n- \u4e0d\u8981\u52a0\u4efb\u4f55\u524d\u7f00\uff0c\u76f4\u63a5\u8f93\u51fa\u753b\u50cf\u5185\u5bb9";
+            String gender = user.getGender() != null ? (user.getGender() == 0 ? "女" : "男") : "未知";
+            String userBasic = String.format("性别:%s, 年龄:%s岁, 身高:%scm, 体重:%skg, 健身目标:%s", gender, user.getAge() != null ? user.getAge() : "未填", user.getHeight() != null ? user.getHeight() : "未填", user.getWeight() != null ? user.getWeight() : "未填", profile != null && profile.getFitnessGoal() != null ? profile.getFitnessGoal() : "未填");
+            String oldProfile = profile != null && profile.getUserProfileText() != null && !profile.getUserProfileText().isBlank() ? profile.getUserProfileText() : "暂无画像";
+            String prompt = "你是一个AI健身教练的助手。请根据用户的【旧画像】、【基本信息】和【用户自填信息】，更新用户画像。\n\n【旧画像】" + oldProfile + "\n【基本信息】" + userBasic + "\n【用户自填】" + profileFormData + "\n\n要求：\n- 把基本信息和自填信息融合到旧画像中，不要分点罗列\n- 保留旧画像中仍然准确的内容\n- 用户自填的信息可能表述不清，帮他总结到位（比如\"办公室\"总结为\"久坐办公\"）\n- 伤病/饮食禁忌必须保留原意，不能遗漏\n- 100字以内，不废话\n- 不要加任何前缀，直接输出画像内容";
             String result = this.callAiSingle(prompt, 200, 0.3);
             if (result != null && !result.isBlank()) {
                 return result.trim();
             }
         }
         catch (Exception e) {
-            log.error("\u751f\u6210\u7528\u6237\u753b\u50cf\u5931\u8d25", (Throwable)e);
+            log.error("生成用户画像失败", (Throwable)e);
         }
         return profileFormData;
     }
 
     private String detectEmotionalState(String message) {
-        String[] negative = new String[]{"\u575a\u6301\u4e0d", "\u653e\u5f03", "\u592a\u96be\u4e86", "\u7126\u8651", "\u5d29\u6e83", "\u7edd\u671b", "\u6491\u4e0d\u4f4f", "\u5fc3\u6001\u5d29"};
-        String[] positive = new String[]{"\u5f00\u5fc3", "\u9ad8\u5174", "\u5174\u594b", "\u671f\u5f85", "\u8fdb\u6b65", "\u6210\u529f", "\u505a\u5230"};
+        String[] negative = new String[]{"坚持不", "放弃", "太难了", "焦虑", "崩溃", "绝望", "撑不住", "心态崩"};
+        String[] positive = new String[]{"开心", "高兴", "兴奋", "期待", "进步", "成功", "做到"};
         for (String word : negative) {
             if (!message.contains(word)) continue;
-            return "\u4f4e\u843d";
+            return "低落";
         }
         for (String word : positive) {
             if (!message.contains(word)) continue;
-            return "\u79ef\u6781";
+            return "积极";
         }
         return null;
     }
@@ -3515,14 +3515,14 @@ implements ChatService {
             this.userDailyMetricService.syncDailyCalories(userId, recordDate, this.dietRecordService.listLegacyRecords(userId, recordDate), this.resolveTargetCalories(user));
         }
         catch (Exception e) {
-            log.error("\u4fdd\u5b58\u996e\u98df\u8bb0\u5f55\u5931\u8d25", (Throwable)e);
+            log.error("保存饮食记录失败", (Throwable)e);
         }
     }
 
     private MealNutrition resolveMealNutrition(List<DietFoodItemRequest> requests, Long userId) {
         List<Long> ids = requests.stream().map(DietFoodItemRequest::getFoodItemId).filter(id -> id != null && id > 0L).distinct().toList();
         if (ids.isEmpty()) {
-            throw new BusincessException(StateCode.PARAMS_ERROR, "\u98df\u7269\u6570\u636e\u4e0d\u80fd\u4e3a\u7a7a");
+            throw new BusincessException(StateCode.PARAMS_ERROR, "食物数据不能为空");
         }
         HashMap<Long, FoodItem> foodMap = new HashMap<Long, FoodItem>();
         for (FoodItem foodItem : this.foodItemService.listByIds(ids)) {
@@ -3540,11 +3540,11 @@ implements ChatService {
         for (DietFoodItemRequest request : requests) {
             FoodItem foodItem = (FoodItem)foodMap.get(request.getFoodItemId());
             if (foodItem == null) {
-                throw new BusincessException(StateCode.PARAMS_ERROR, "\u98df\u7269\u4e0d\u5b58\u5728\u6216\u65e0\u6743\u9650\u4f7f\u7528");
+                throw new BusincessException(StateCode.PARAMS_ERROR, "食物不存在或无权限使用");
             }
             BigDecimal amount = request.getAmount();
             if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
-                throw new BusincessException(StateCode.PARAMS_ERROR, "\u6444\u5165\u91cf\u5fc5\u987b\u5927\u4e8e0");
+                throw new BusincessException(StateCode.PARAMS_ERROR, "摄入量必须大于0");
             }
             BigDecimal baseAmount = this.defaultIfZero(foodItem.getBaseAmount());
             BigDecimal ratio = amount.divide(baseAmount, 4, RoundingMode.HALF_UP);
@@ -3572,7 +3572,7 @@ implements ChatService {
             item.put("fiber", itemFiber);
             items.add(item);
         }
-        return new MealNutrition(String.join((CharSequence)"\u3001", names), calories.setScale(0, RoundingMode.HALF_UP), protein.setScale(1, RoundingMode.HALF_UP), carbs.setScale(1, RoundingMode.HALF_UP), fat.setScale(1, RoundingMode.HALF_UP), fiber.setScale(1, RoundingMode.HALF_UP), items);
+        return new MealNutrition(String.join((CharSequence)"、", names), calories.setScale(0, RoundingMode.HALF_UP), protein.setScale(1, RoundingMode.HALF_UP), carbs.setScale(1, RoundingMode.HALF_UP), fat.setScale(1, RoundingMode.HALF_UP), fiber.setScale(1, RoundingMode.HALF_UP), items);
     }
 
     private BigDecimal defaultIfZero(BigDecimal value) {
@@ -3613,7 +3613,7 @@ implements ChatService {
             this.exerciseRecordService.saveRecord(userId, LocalDate.parse(today, DateTimeFormatter.ISO_LOCAL_DATE), body, "chat");
         }
         catch (Exception e) {
-            log.error("\u4fdd\u5b58\u8fd0\u52a8\u8bb0\u5f55\u5931\u8d25", (Throwable)e);
+            log.error("保存运动记录失败", (Throwable)e);
         }
     }
 
@@ -3626,7 +3626,7 @@ implements ChatService {
             return (List)JSON_MAPPER.readValue(fixed, (TypeReference)new TypeReference<List<Map<String, Object>>>(){});
         }
         catch (Exception e) {
-            log.warn("\u89e3\u6790\u5bf9\u8c61\u6570\u7ec4\u5931\u8d25: {}", (Object)json, (Object)e);
+            log.warn("解析对象数组失败: {}", (Object)json, (Object)e);
             return new ArrayList<Map<String, Object>>();
         }
     }
@@ -3668,18 +3668,18 @@ implements ChatService {
             LocalTime time = LocalTime.parse(recordTime, TIME_FMT);
             int hour = time.getHour();
             if (hour < 10) {
-                return "\u65e9\u9910";
+                return "早餐";
             }
             if (hour < 14) {
-                return "\u5348\u9910";
+                return "午餐";
             }
             if (hour < 17) {
-                return "\u52a0\u9910";
+                return "加餐";
             }
             if (hour < 21) {
-                return "\u665a\u9910";
+                return "晚餐";
             }
-            return "\u52a0\u9910";
+            return "加餐";
         }
         catch (Exception ignored) {
             return this.getCurrentMealType();
@@ -3695,20 +3695,20 @@ implements ChatService {
         if (text.isBlank()) {
             return "";
         }
-        if (text.contains("\u7ec3\u540e")) {
-            return "\u7ec3\u540e\u9910";
+        if (text.contains("练后")) {
+            return "练后餐";
         }
-        if (text.contains("\u65e9\u9910")) {
-            return "\u65e9\u9910";
+        if (text.contains("早餐")) {
+            return "早餐";
         }
-        if (text.contains("\u5348\u9910") || text.contains("\u5348\u996d")) {
-            return "\u5348\u9910";
+        if (text.contains("午餐") || text.contains("午饭")) {
+            return "午餐";
         }
-        if (text.contains("\u665a\u9910") || text.contains("\u665a\u996d")) {
-            return "\u665a\u9910";
+        if (text.contains("晚餐") || text.contains("晚饭")) {
+            return "晚餐";
         }
-        if (text.contains("\u52a0\u9910") || text.contains("\u591c\u5bb5") || text.contains("\u5bb5\u591c")) {
-            return "\u52a0\u9910";
+        if (text.contains("加餐") || text.contains("夜宵") || text.contains("宵夜")) {
+            return "加餐";
         }
         return "";
     }
@@ -3776,7 +3776,7 @@ implements ChatService {
         Object v = map.get("items");
         List list2 = rawItems = v instanceof List ? (list = (List)v) : Collections.emptyList();
         if (rawItems.isEmpty()) {
-            String fallbackMessage = clarificationMessage.isBlank() ? "\u8981\u5e2e\u4f60\u8bb0\u5f55\u996e\u98df\uff0c\u8bf7\u8865\u5145\u5177\u4f53\u98df\u7269\u540d\u548c\u514b\u91cd/\u4efd\u91cf\uff0c\u6216\u8005\u5230\u8bb0\u5f55\u996e\u98df\u754c\u9762\u76f4\u63a5\u9009\u62e9\u98df\u7269\u3002" : clarificationMessage;
+            String fallbackMessage = clarificationMessage.isBlank() ? "要帮你记录饮食，请补充具体食物名和克重/份量，或者到记录饮食界面直接选择食物。" : clarificationMessage;
             return new DietRecordDecision(null, continueChat, fallbackMessage, "");
         }
         StructuredDietParseResult structuredResult = this.tryBuildStructuredDietRequest(rawItems, userId);
@@ -3806,7 +3806,7 @@ implements ChatService {
 
     private StructuredDietParseResult tryBuildStructuredDietRequest(List<Map<String, Object>> rawItems, Long userId) {
         if (rawItems == null || rawItems.isEmpty()) {
-            return new StructuredDietParseResult(null, "\u8981\u5e2e\u4f60\u8bb0\u5f55\u996e\u98df\uff0c\u8bf7\u8865\u5145\u5177\u4f53\u98df\u7269\u540d\u548c\u514b\u91cd/\u4efd\u91cf\u3002", "");
+            return new StructuredDietParseResult(null, "要帮你记录饮食，请补充具体食物名和克重/份量。", "");
         }
         ArrayList<DietFoodItemRequest> resolvedItems = new ArrayList<DietFoodItemRequest>();
         ArrayList<String> resolvedNames = new ArrayList<String>();
@@ -3817,11 +3817,11 @@ implements ChatService {
             String action;
             String rawName = this.toCleanString(rawItem.get("name"));
             if (rawName.isBlank()) {
-                return new StructuredDietParseResult(null, "\u8fd9\u6761\u996e\u98df\u91cc\u8fd8\u7f3a\u5177\u4f53\u98df\u7269\u540d\uff0c\u8865\u5145\u540e\u6211\u518d\u5e2e\u4f60\u8bb0\u5f55\u3002", "");
+                return new StructuredDietParseResult(null, "这条饮食里还缺具体食物名，补充后我再帮你记录。", "");
             }
             BigDecimal amount = this.parseBigDecimal(rawItem.get("amount"));
             if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
-                return new StructuredDietParseResult(null, "\u8981\u5e2e\u4f60\u8bb0\u5f55\u201c" + rawName + "\u201d\uff0c\u8fd8\u9700\u8981\u8865\u5145\u514b\u91cd\u6216\u4efd\u91cf\u3002", "");
+                return new StructuredDietParseResult(null, "要帮你记录“" + rawName + "”，还需要补充克重或份量。", "");
             }
             BigDecimal fallbackCalories = this.parseBigDecimal(rawItem.get("calories"));
             String rawUnit = this.toCleanString(rawItem.get("unit"));
@@ -3849,16 +3849,16 @@ implements ChatService {
                 }
             }
             if ("clarify".equals(action)) {
-                return new StructuredDietParseResult(null, "\u8981\u5e2e\u4f60\u8bb0\u5f55\u201c" + rawName + "\u201d\uff0c\u8fd8\u9700\u8981\u8865\u5145\u66f4\u5b8c\u6574\u7684\u4fe1\u606f\u3002", "");
+                return new StructuredDietParseResult(null, "要帮你记录“" + rawName + "”，还需要补充更完整的信息。", "");
             }
             if (foodItem == null) {
-                return new StructuredDietParseResult(null, "\u98df\u7269\u5e93\u6682\u65e0\u201c" + rawName + "\u201d\u7684\u6570\u636e\u3002\u5982\u679c\u60f3\u8bb0\u5f55\u70ed\u91cf\u548c\u8425\u517b\u7269\u8d28\uff0c\u53ef\u4ee5\u81ea\u884c\u4e0a\u4f20\u8fd9\u4e2a\u98df\u7269\u7684\u5177\u4f53\u6570\u503c\u54e6\u3002", "");
+                return new StructuredDietParseResult(null, "食物库暂无“" + rawName + "”的数据。如果想记录热量和营养物质，可以自行上传这个食物的具体数值哦。", "");
             }
             if (this.isIncompleteAiFood(foodItem)) {
                 hasIncompleteFood = true;
             }
             if ((normalizedAmount = this.normalizeDietAmount(amount, rawUnit, foodItem.getUnit())) == null || normalizedAmount.compareTo(BigDecimal.ZERO) <= 0) {
-                return new StructuredDietParseResult(null, "\u201c" + rawName + "\u201d\u8fd9\u6761\u8fd8\u7f3a\u53ef\u6362\u7b97\u7684\u514b\u91cd/\u6beb\u5347/\u4efd\u91cf\uff0c\u8865\u5145\u540e\u6211\u518d\u5e2e\u4f60\u8bb0\u5f55\u3002", "");
+                return new StructuredDietParseResult(null, "“" + rawName + "”这条还缺可换算的克重/毫升/份量，补充后我再帮你记录。", "");
             }
             DietFoodItemRequest requestItem = new DietFoodItemRequest();
             requestItem.setFoodItemId(foodItem.getId());
@@ -3867,9 +3867,9 @@ implements ChatService {
             resolvedNames.add(foodItem.getName());
         }
         AddDietRecordRequest request = new AddDietRecordRequest();
-        request.setName(String.join((CharSequence)"\u3001", resolvedNames));
+        request.setName(String.join((CharSequence)"、", resolvedNames));
         request.setItems(resolvedItems);
-        String noticeMessage = hasIncompleteFood ? "\u8fd9\u6b21\u6709\u98df\u7269\u662f\u6309\u4f60\u63d0\u4f9b\u7684\u70ed\u91cf\u548c\u5206\u91cf\u65b0\u5efa\u7684\u7b80\u5316\u6570\u636e\uff0c\u6682\u65f6\u4e0d\u80fd\u51c6\u786e\u5224\u65ad\u86cb\u767d\u8d28\u7b49\u8425\u517b\uff1b\u53ef\u4ee5\u53bb\u4e2a\u4eba\u4e2d\u5fc3\u7ba1\u7406\u81ea\u5df1\u521b\u5efa\u7684\u98df\u7269\u8865\u5168\u3002" : "";
+        String noticeMessage = hasIncompleteFood ? "这次有食物是按你提供的热量和分量新建的简化数据，暂时不能准确判断蛋白质等营养；可以去个人中心管理自己创建的食物补全。" : "";
         return new StructuredDietParseResult(request, "", noticeMessage);
     }
 
@@ -3878,7 +3878,7 @@ implements ChatService {
             return null;
         }
         String normalizedUnit = this.normalizeAmountUnit(rawUnit);
-        if (!("g".equals(normalizedUnit) || "ml".equals(normalizedUnit) || "\u4e2a".equals(normalizedUnit) || "\u7247".equals(normalizedUnit) || "\u6839".equals(normalizedUnit) || "\u888b".equals(normalizedUnit) || "\u4efd".equals(normalizedUnit))) {
+        if (!("g".equals(normalizedUnit) || "ml".equals(normalizedUnit) || "个".equals(normalizedUnit) || "片".equals(normalizedUnit) || "根".equals(normalizedUnit) || "袋".equals(normalizedUnit) || "份".equals(normalizedUnit))) {
             return null;
         }
         String normalizedCalorieUnit = this.normalizeCalorieUnit(calorieUnit);
@@ -4062,7 +4062,7 @@ implements ChatService {
         }
         ArrayList<DietFoodItemRequest> matchedItems = new ArrayList<DietFoodItemRequest>();
         LinkedHashSet<Long> seenFoodIds = new LinkedHashSet<Long>();
-        String normalizedLine = rawDescription.replace("\u4ee5\u53ca", "+").replace("\u8fd8\u6709", "+").replace("\u5e76\u4e14", "+").replace("\u7136\u540e", "+").replace("\u518d\u52a0", "+").replace("\u642d\u914d", "+").replace("\u914d", "+").replace("\u548c", "+").replace("\u3001", "+").replace("\uff0c", "+").replace(",", "+");
+        String normalizedLine = rawDescription.replace("以及", "+").replace("还有", "+").replace("并且", "+").replace("然后", "+").replace("再加", "+").replace("搭配", "+").replace("配", "+").replace("和", "+").replace("、", "+").replace("，", "+").replace(",", "+");
         for (ParsedFoodAmount parsed : this.parseDietFoodLine(normalizedLine)) {
             FoodItem foodItem = this.findStrictVisibleFood(userId, parsed.name());
             if (foodItem == null || foodItem.getId() == null || !seenFoodIds.add(foodItem.getId())) continue;
@@ -4091,10 +4091,10 @@ implements ChatService {
         if (text.isBlank()) {
             return "";
         }
-        text = text.replaceAll("^(\u6211|\u4eca\u5929|\u521a\u521a|\u521a\u624d|\u521a|\u65e9\u4e0a|\u4e2d\u5348|\u665a\u4e0a|\u591c\u91cc|\u591c\u5bb5|\u5bb5\u591c|\u65e9\u9910|\u5348\u9910|\u5348\u996d|\u665a\u9910|\u52a0\u9910|\u7ec3\u540e|\u559d\u4e86|\u5403\u4e86|\u559d|\u5403)+", "");
+        text = text.replaceAll("^(我|今天|刚刚|刚才|刚|早上|中午|晚上|夜里|夜宵|宵夜|早餐|午餐|午饭|晚餐|加餐|练后|喝了|吃了|喝|吃)+", "");
         text = text.replaceAll("\\d+(?:\\.\\d+)?\\s*(kg|g|ml|l)$", "");
-        text = text.replaceAll("^[\u96f6\u4e00\u4e8c\u4e24\u4e09\u56db\u4e94\u516d\u4e03\u516b\u4e5d\u5341\u767e\u534a\u51e0\u591a\u5c11\\d]+\\s*(\u4e2a|\u676f|\u7897|\u52fa|\u7247|\u5757|\u6839|\u888b|\u4efd|\u53ea|\u679a|\u4e32|\u76d2|\u74f6|\u542c|\u7f50)", "");
-        text = text.replaceAll("[\u96f6\u4e00\u4e8c\u4e24\u4e09\u56db\u4e94\u516d\u4e03\u516b\u4e5d\u5341\u767e\u534a\u51e0\u591a\u5c11\\d]", "");
+        text = text.replaceAll("^[零一二两三四五六七八九十百半几多少\\d]+\\s*(个|杯|碗|勺|片|块|根|袋|份|只|枚|串|盒|瓶|听|罐)", "");
+        text = text.replaceAll("[零一二两三四五六七八九十百半几多少\\d]", "");
         return this.safeTrim(text);
     }
 
@@ -4126,15 +4126,15 @@ implements ChatService {
             return "";
         }
         return switch (text) {
-            case "g", "\u514b", "\u516c\u514b", "gram", "grams" -> "g";
-            case "kg", "\u516c\u65a4", "\u5343\u514b", "kilogram", "kilograms" -> "kg";
-            case "ml", "\u6beb\u5347" -> "ml";
-            case "l", "\u5347", "liter", "liters" -> "l";
-            case "\u4e2a" -> "\u4e2a";
-            case "\u7247" -> "\u7247";
-            case "\u6839" -> "\u6839";
-            case "\u888b" -> "\u888b";
-            case "\u4efd" -> "\u4efd";
+            case "g", "克", "公克", "gram", "grams" -> "g";
+            case "kg", "公斤", "千克", "kilogram", "kilograms" -> "kg";
+            case "ml", "毫升" -> "ml";
+            case "l", "升", "liter", "liters" -> "l";
+            case "个" -> "个";
+            case "片" -> "片";
+            case "根" -> "根";
+            case "袋" -> "袋";
+            case "份" -> "份";
             default -> text;
         };
     }
@@ -4151,12 +4151,12 @@ implements ChatService {
         }
         LinkedHashSet<String> aliases = new LinkedHashSet<String>();
         aliases.add(raw);
-        aliases.add(raw.replace("\u67d0\u67d0", "").replace("\u8fd9\u4e2a", "").replace("\u8fd9\u79cd", "").trim());
-        aliases.add(raw.replace("\u5373\u98df", "").trim());
-        aliases.add(raw.replace("\u53bb\u76ae", "").trim());
-        aliases.add(raw.replace("\u9e21\u80f8\u8089", "\u9e21\u80f8").trim());
-        aliases.add(raw.replace("\u9e21\u80f8", "\u9e21\u80f8\u8089").trim());
-        aliases.add(raw.replace("\u725b\u5976", "\u4f4e\u8102\u725b\u5976").trim());
+        aliases.add(raw.replace("某某", "").replace("这个", "").replace("这种", "").trim());
+        aliases.add(raw.replace("即食", "").trim());
+        aliases.add(raw.replace("去皮", "").trim());
+        aliases.add(raw.replace("鸡胸肉", "鸡胸").trim());
+        aliases.add(raw.replace("鸡胸", "鸡胸肉").trim());
+        aliases.add(raw.replace("牛奶", "低脂牛奶").trim());
         aliases.removeIf(String::isBlank);
         return new ArrayList<String>(aliases);
     }
@@ -4164,11 +4164,11 @@ implements ChatService {
     private String normalizeAiFoodCategory(String category) {
         String text = this.toCleanString(category);
         if (text.isBlank()) {
-            return "\u672a\u5206\u7c7b";
+            return "未分类";
         }
         return switch (text) {
-            case "\u78b3\u6c34", "\u86cb\u767d\u8d28", "\u8102\u80aa", "\u852c\u83dc", "\u6c34\u679c", "\u4e73\u5236\u54c1", "\u996e\u54c1", "\u96f6\u98df", "\u8865\u5242", "\u672a\u5206\u7c7b" -> text;
-            default -> "\u672a\u5206\u7c7b";
+            case "碳水", "蛋白质", "脂肪", "蔬菜", "水果", "乳制品", "饮品", "零食", "补剂", "未分类" -> text;
+            default -> "未分类";
         };
     }
 
@@ -4178,8 +4178,8 @@ implements ChatService {
             return "kcal";
         }
         return switch (text) {
-            case "kj", "\u5343\u7126" -> "kj";
-            case "kcal", "\u5361", "\u5927\u5361", "\u5361\u8def\u91cc" -> "kcal";
+            case "kj", "千焦" -> "kj";
+            case "kcal", "卡", "大卡", "卡路里" -> "kcal";
             default -> "kcal";
         };
     }
@@ -4228,49 +4228,49 @@ implements ChatService {
     }
 
     private String normalizeTrainingLookupTarget(String targetDay) {
-        if ("\u660e\u5929".equals(targetDay)) {
-            return "\u660e\u5929";
+        if ("明天".equals(targetDay)) {
+            return "明天";
         }
-        return "\u4eca\u5929";
+        return "今天";
     }
 
     private String normalizeMealType(String mealType) {
         if (mealType == null || mealType.isBlank()) {
-            return "\u52a0\u9910";
+            return "加餐";
         }
-        if (mealType.contains("\u7ec3\u540e")) {
-            return "\u7ec3\u540e\u9910";
+        if (mealType.contains("练后")) {
+            return "练后餐";
         }
-        if (mealType.contains("\u65e9\u9910")) {
-            return "\u65e9\u9910";
+        if (mealType.contains("早餐")) {
+            return "早餐";
         }
-        if (mealType.contains("\u5348\u9910") || mealType.contains("\u5348\u996d")) {
-            return "\u5348\u9910";
+        if (mealType.contains("午餐") || mealType.contains("午饭")) {
+            return "午餐";
         }
-        if (mealType.contains("\u665a\u9910") || mealType.contains("\u665a\u996d")) {
-            return "\u665a\u9910";
+        if (mealType.contains("晚餐") || mealType.contains("晚饭")) {
+            return "晚餐";
         }
-        return "\u52a0\u9910";
+        return "加餐";
     }
 
     private String normalizeLookupMealType(String mealType) {
         if (mealType == null || mealType.isBlank()) {
             return "";
         }
-        if (mealType.contains("\u7ec3\u540e")) {
-            return "\u7ec3\u540e\u9910";
+        if (mealType.contains("练后")) {
+            return "练后餐";
         }
-        if (mealType.contains("\u65e9\u9910")) {
-            return "\u65e9\u9910";
+        if (mealType.contains("早餐")) {
+            return "早餐";
         }
-        if (mealType.contains("\u5348\u9910") || mealType.contains("\u5348\u996d")) {
-            return "\u5348\u9910";
+        if (mealType.contains("午餐") || mealType.contains("午饭")) {
+            return "午餐";
         }
-        if (mealType.contains("\u665a\u9910") || mealType.contains("\u665a\u996d")) {
-            return "\u665a\u9910";
+        if (mealType.contains("晚餐") || mealType.contains("晚饭")) {
+            return "晚餐";
         }
-        if (mealType.contains("\u52a0\u9910") || mealType.contains("\u591c\u5bb5") || mealType.contains("\u5bb5\u591c")) {
-            return "\u52a0\u9910";
+        if (mealType.contains("加餐") || mealType.contains("夜宵") || mealType.contains("宵夜")) {
+            return "加餐";
         }
         return "";
     }
@@ -4384,7 +4384,7 @@ implements ChatService {
                 return this.aiModelConfig.getCustomProvider(cm.get("name"), cm.get("baseUrl"), cm.get("apiKey"), cm.get("model"));
             }
         }
-        throw new BusincessException(StateCode.AI_ERROR, "\u5f53\u524dAI\u6a21\u578b\u4e0d\u5b58\u5728\uff0c\u8bf7\u5207\u6362\u522b\u7684AI\u8bd5\u4e00\u8bd5");
+        throw new BusincessException(StateCode.AI_ERROR, "当前AI模型不存在，请切换别的AI试一试");
     }
 
     private List<Map<String, String>> loadCustomModelsFromRedis(Long userId) {
@@ -4421,11 +4421,11 @@ implements ChatService {
     private String normalizeTrainingAdvice(String advice, String normalizedSection, boolean isRestDay) {
         String text = advice == null ? "" : advice.trim();
         if (text.isEmpty()) {
-            return isRestDay ? "\u5efa\u8bae\uff1a\u4eca\u5929\u4ee5\u6062\u590d\u4e3a\u4e3b\uff0c\u505a\u4e00\u70b9\u8f7b\u62c9\u4f38\u548c\u6563\u6b65\u5c31\u591f\u4e86\u3002" : "\u5efa\u8bae\uff1a\u52a8\u4f5c\u8282\u594f\u7a33\u4e00\u70b9\uff0c\u5148\u628a\u70ed\u8eab\u548c\u62c9\u4f38\u505a\u5b8c\u6574\u3002";
+            return isRestDay ? "建议：今天以恢复为主，做一点轻拉伸和散步就够了。" : "建议：动作节奏稳一点，先把热身和拉伸做完整。";
         }
-        text = text.replaceAll("^(\u4eca\u5929|\u660e\u5929)[\\uff0c,:\\uff1a]?", "").trim();
+        text = text.replaceAll("^(今天|明天)[\\uff0c,:\\uff1a]?", "").trim();
         text = text.replaceAll("\\r", "");
-        String[] suggestionParts = text.split("(?=\u5efa\u8bae[\\uff1a:])");
+        String[] suggestionParts = text.split("(?=建议[\\uff1a:])");
         if (suggestionParts.length > 1) {
             String candidate = "";
             for (String part : suggestionParts) {
@@ -4437,47 +4437,47 @@ implements ChatService {
                 text = candidate;
             }
         }
-        if (!isRestDay && (text.contains("\u4f11\u606f\u65e5") || text.contains("\u6062\u590d\u65e5"))) {
+        if (!isRestDay && (text.contains("休息日") || text.contains("恢复日"))) {
             return this.buildTrainingAdviceFallback(normalizedSection, false);
         }
-        if (!text.startsWith("\u5efa\u8bae")) {
-            text = "\u5efa\u8bae\uff1a" + text;
+        if (!text.startsWith("建议")) {
+            text = "建议：" + text;
         }
         return text;
     }
 
     private String buildTrainingAdviceFallback(String normalizedSection, boolean isRestDay) {
         if (isRestDay) {
-            return "\u5efa\u8bae\uff1a\u4ee5\u6062\u590d\u4e3a\u4e3b\uff0c\u505a\u4e00\u70b9\u8f7b\u62c9\u4f38\u548c\u6563\u6b65\u5c31\u591f\u4e86\u3002";
+            return "建议：以恢复为主，做一点轻拉伸和散步就够了。";
         }
-        if (normalizedSection.contains("\u80f8")) {
-            return "\u5efa\u8bae\uff1a\u7ec3\u80f8\u65f6\u91cd\u70b9\u62c9\u4f38\u80f8\u5927\u808c\u548c\u80a9\u524d\u675f\uff0c\u52a8\u4f5c\u8282\u594f\u7a33\u4e00\u70b9\uff0c\u4e0d\u8981\u6025\u7740\u4e0a\u91cd\u91cf\u3002";
+        if (normalizedSection.contains("胸")) {
+            return "建议：练胸时重点拉伸胸大肌和肩前束，动作节奏稳一点，不要急着上重量。";
         }
-        if (normalizedSection.contains("\u80cc")) {
-            return "\u5efa\u8bae\uff1a\u7ec3\u80cc\u65f6\u5148\u628a\u52a8\u4f5c\u8f68\u8ff9\u505a\u7a33\u5b9a\uff0c\u7ec3\u5b8c\u628a\u80cc\u9614\u808c\u548c\u4e0b\u80cc\u90e8\u62c9\u4f38\u5230\u4f4d\u3002";
+        if (normalizedSection.contains("背")) {
+            return "建议：练背时先把动作轨迹做稳定，练完把背阔肌和下背部拉伸到位。";
         }
-        if (normalizedSection.contains("\u817f")) {
-            return "\u5efa\u8bae\uff1a\u7ec3\u817f\u65f6\u7ec4\u95f4\u628a\u547c\u5438\u8282\u594f\u7a33\u4f4f\uff0c\u7ec3\u5b8c\u8bb0\u5f97\u8865\u6c34\u548c\u62c9\u4f38\u3002";
+        if (normalizedSection.contains("腿")) {
+            return "建议：练腿时组间把呼吸节奏稳住，练完记得补水和拉伸。";
         }
-        if (normalizedSection.contains("\u80a9")) {
-            return "\u5efa\u8bae\uff1a\u7ec3\u80a9\u65f6\u6ce8\u610f\u52a8\u4f5c\u63a7\u5236\uff0c\u907f\u514d\u501f\u529b\u8fc7\u591a\uff0c\u7ec3\u5b8c\u628a\u4e09\u89d2\u808c\u548c\u4e0a\u80cc\u653e\u677e\u5f00\u3002";
+        if (normalizedSection.contains("肩")) {
+            return "建议：练肩时注意动作控制，避免借力过多，练完把三角肌和上背放松开。";
         }
-        return "\u5efa\u8bae\uff1a\u52a8\u4f5c\u8282\u594f\u7a33\u4e00\u70b9\uff0c\u5148\u628a\u70ed\u8eab\u548c\u62c9\u4f38\u505a\u5b8c\u6574\u3002";
+        return "建议：动作节奏稳一点，先把热身和拉伸做完整。";
     }
 
     private String buildDietMealRequestInstruction(String msg) {
         String mealType = this.resolveMealType(msg);
         if (mealType == null) {
-            return "6. \u5982\u679c\u7528\u6237\u6ca1\u6709\u660e\u786e\u6307\u5b9a\u67d0\u4e00\u9910\uff0c\u9ed8\u8ba4\u751f\u6210\u5168\u5929\u996e\u98df\uff08\u65e9\u9910\u3001\u5348\u9910\u3001\u665a\u9910\u3001\u52a0\u9910\u56db\u9910\uff09\n7. \u5982\u679c\u7528\u6237\u95ee\u6cd5\u6bd4\u8f83\u5bbd\u6cdb\uff0c\u5982\u201c\u63a8\u8350\u996e\u98df\u201d\u201c\u51cf\u8102\u600e\u4e48\u5403\u201d\uff0c\u4e5f\u6309\u5168\u5929\u996e\u98df\u8f93\u51fa\n8. \u8f93\u51fa\u65f6\u5fc5\u987b\u8986\u76d6\u65e9\u9910\u3001\u5348\u9910\u3001\u665a\u9910\u3001\u52a0\u9910\u56db\u9910\uff0c\u4e0d\u8981\u53ea\u7ed9\u5176\u4e2d\u4e00\u9910\n";
+            return "6. 如果用户没有明确指定某一餐，默认生成全天饮食（早餐、午餐、晚餐、加餐四餐）\n7. 如果用户问法比较宽泛，如“推荐饮食”“减脂怎么吃”，也按全天饮食输出\n8. 输出时必须覆盖早餐、午餐、晚餐、加餐四餐，不要只给其中一餐\n";
         }
-        return "6. \u7528\u6237\u8fd9\u6b21\u660e\u786e\u53ea\u60f3\u770b\u67d0\u4e00\u9910\uff0c\u8bf7\u53ea\u751f\u6210\u3010%s\u3011\u8fd9\u4e00\u9910\uff0c\u4e0d\u8981\u8f93\u51fa\u5168\u5929\u98df\u8c31\n7. \u4e0d\u8981\u989d\u5916\u8865\u65e9\u9910/\u5348\u9910/\u665a\u9910/\u52a0\u9910\u5176\u5b83\u9910\u6b21\n8. \u6807\u9898\u548c\u6b63\u6587\u90fd\u56f4\u7ed5\u3010%s\u3011\u8fd9\u4e00\u9910\uff0c\u4e0d\u8981\u51fa\u73b0\u201c\u5168\u5929\u98df\u8c31\u201d\u201c\u4e00\u65e5\u98df\u8c31\u63a8\u8350\u201d\n".formatted(mealType, mealType);
+        return "6. 用户这次明确只想看某一餐，请只生成【%s】这一餐，不要输出全天食谱\n7. 不要额外补早餐/午餐/晚餐/加餐其它餐次\n8. 标题和正文都围绕【%s】这一餐，不要出现“全天食谱”“一日食谱推荐”\n".formatted(mealType, mealType);
     }
 
     private String sanitizeTrainingPlanOutput(String aiReply, boolean forceDefaultTrainingWeek) {
         if (aiReply == null || aiReply.isBlank()) {
             return aiReply;
         }
-        Matcher matcher = Pattern.compile("###\\s*\u661f\u671f([\u4e00\u4e8c\u4e09\u56db\u4e94\u516d\u65e5\u5929]).*?(?=###\\s*\u661f\u671f|$)", 32).matcher(aiReply);
+        Matcher matcher = Pattern.compile("###\\s*星期([一二三四五六日天]).*?(?=###\\s*星期|$)", 32).matcher(aiReply);
         ArrayList<String> sections = new ArrayList<String>();
         while (matcher.find()) {
             String block = this.safeTrim(matcher.group());
@@ -4500,24 +4500,24 @@ implements ChatService {
         if (forceDefaultTrainingWeek) {
             this.enforceDefaultTrainingWeek(sections);
         }
-        return "### \u8bad\u7ec3\u8ba1\u5212\n\n" + String.join((CharSequence)"\n\n", sections);
+        return "### 训练计划\n\n" + String.join((CharSequence)"\n\n", sections);
     }
 
     private boolean shouldForceDefaultTrainingWeek(String message) {
         if (this.isBlank(message)) {
             return true;
         }
-        String normalized = message.replace("\u6bcf\u5468", "");
-        return !normalized.contains("\u7ec3\u4e09\u4f11\u4e00") && !normalized.contains("\u7ec3\u56db\u4f11\u4e00") && !normalized.contains("\u7ec3\u4e00\u4f11\u4e00") && !normalized.contains("\u6bcf\u5929\u90fd\u7ec3") && !normalized.contains("\u5929\u5929\u7ec3") && !normalized.contains("\u6bcf\u5468\u7ec3") && !normalized.contains("\u4e00\u5468\u7ec3") && !normalized.contains("\u5468\u672b\u4e5f\u7ec3") && !normalized.contains("\u5468\u516d\u7ec3") && !normalized.contains("\u5468\u65e5\u7ec3") && !normalized.contains("\u661f\u671f\u516d\u7ec3") && !normalized.contains("\u661f\u671f\u65e5\u7ec3") && !normalized.contains("\u5468\u51e0\u4f11") && !normalized.contains("\u661f\u671f\u51e0\u4f11");
+        String normalized = message.replace("每周", "");
+        return !normalized.contains("练三休一") && !normalized.contains("练四休一") && !normalized.contains("练一休一") && !normalized.contains("每天都练") && !normalized.contains("天天练") && !normalized.contains("每周练") && !normalized.contains("一周练") && !normalized.contains("周末也练") && !normalized.contains("周六练") && !normalized.contains("周日练") && !normalized.contains("星期六练") && !normalized.contains("星期日练") && !normalized.contains("周几休") && !normalized.contains("星期几休");
     }
 
     private void enforceDefaultTrainingWeek(List<String> sections) {
-        Map<String, String> forcedRestMap = Map.of("\u4e09", "### \u661f\u671f\u4e09 \u00b7 \u4f11\u606f\u65e5\n\n> \u4f11\u606f\uff0c\u53ef\u505a30\u5206\u949f\u4f4e\u5f3a\u5ea6\u6709\u6c27\uff08\u6563\u6b65/\u5feb\u8d70\uff09", "\u516d", "### \u661f\u671f\u516d \u00b7 \u4f11\u606f\u65e5\n\n> \u4f11\u606f\uff0c\u53ef\u505a30\u5206\u949f\u4f4e\u5f3a\u5ea6\u6709\u6c27\uff08\u6563\u6b65/\u5feb\u8d70\uff09", "\u65e5", "### \u661f\u671f\u65e5 \u00b7 \u4f11\u606f\u65e5\n\n> \u4f11\u606f\uff0c\u53ef\u505a30\u5206\u949f\u4f4e\u5f3a\u5ea6\u6709\u6c27\uff08\u6563\u6b65/\u5feb\u8d70\uff09", "\u5929", "### \u661f\u671f\u65e5 \u00b7 \u4f11\u606f\u65e5\n\n> \u4f11\u606f\uff0c\u53ef\u505a30\u5206\u949f\u4f4e\u5f3a\u5ea6\u6709\u6c27\uff08\u6563\u6b65/\u5feb\u8d70\uff09");
+        Map<String, String> forcedRestMap = Map.of("三", "### 星期三 · 休息日\n\n> 休息，可做30分钟低强度有氧（散步/快走）", "六", "### 星期六 · 休息日\n\n> 休息，可做30分钟低强度有氧（散步/快走）", "日", "### 星期日 · 休息日\n\n> 休息，可做30分钟低强度有氧（散步/快走）", "天", "### 星期日 · 休息日\n\n> 休息，可做30分钟低强度有氧（散步/快走）");
         for (int i = 0; i < sections.size(); ++i) {
             String dayKey;
             String forcedRest;
             String section = sections.get(i);
-            Matcher dayMatcher = Pattern.compile("\u661f\u671f([\u4e00\u4e8c\u4e09\u56db\u4e94\u516d\u65e5\u5929])").matcher(section);
+            Matcher dayMatcher = Pattern.compile("星期([一二三四五六日天])").matcher(section);
             if (!dayMatcher.find() || (forcedRest = forcedRestMap.get(dayKey = dayMatcher.group(1))) == null) continue;
             sections.set(i, forcedRest);
         }
@@ -4527,7 +4527,7 @@ implements ChatService {
         if (aiReply == null || aiReply.isBlank()) {
             return aiReply;
         }
-        List<String> mealOrder = List.of("\u65e9\u9910", "\u5348\u9910", "\u665a\u9910", "\u52a0\u9910", "\u7ec3\u540e\u9910");
+        List<String> mealOrder = List.of("早餐", "午餐", "晚餐", "加餐", "练后餐");
         LinkedHashMap<String, String> mealMap = new LinkedHashMap<>();
         for (String rawLine : aiReply.split("\\r?\\n")) {
             String normalizedMeal;
@@ -4544,8 +4544,8 @@ implements ChatService {
         }
         boolean singleMeal = targetMealType != null && !targetMealType.isBlank();
         StringBuilder sb = new StringBuilder();
-        sb.append("### ").append(singleMeal ? targetMealType + "\u63a8\u8350" : "\u4e00\u65e5\u98df\u8c31\u63a8\u8350").append("\n\n");
-        sb.append("| \u9910\u6b21 | \u63a8\u8350\u98df\u7269 |\n|------|----------|\n");
+        sb.append("### ").append(singleMeal ? targetMealType + "推荐" : "一日食谱推荐").append("\n\n");
+        sb.append("| 餐次 | 推荐食物 |\n|------|----------|\n");
         if (singleMeal) {
             String row = mealMap.get(targetMealType);
             if (row == null) {
@@ -4574,7 +4574,7 @@ implements ChatService {
         debugTimings.put("requestStartedAtMs", requestStartedAt);
         AiModelConfig.ModelProvider visionProvider = this.resolveVisionProvider(userId);
         if (visionProvider == null) {
-            throw new BusincessException(StateCode.AI_ERROR, "\u89c6\u89c9\u6a21\u578b\u672a\u914d\u7f6e");
+            throw new BusincessException(StateCode.AI_ERROR, "视觉模型未配置");
         }
         String imageUrl = this.fileService.uploadFoodImage(file, userId);
         debugTimings.put("imageUploadedAtMs", System.currentTimeMillis());
@@ -4583,7 +4583,7 @@ implements ChatService {
         contentParts.add(Map.of("type", "image_url", "image_url", Map.of("url", imageUrl)));
         Map<String, Object> visionResponse = this.aiCallHelper.callVision(visionProvider, contentParts, 512, 0.0);
         if (visionResponse == null) {
-            throw new BusincessException(StateCode.AI_ERROR, "\u89c6\u89c9\u6a21\u578b\u8c03\u7528\u5931\u8d25");
+            throw new BusincessException(StateCode.AI_ERROR, "视觉模型调用失败");
         }
         debugTimings.put("visionCompletedAtMs", System.currentTimeMillis());
         Integer estimatedGrams = null;
@@ -4613,7 +4613,7 @@ implements ChatService {
                     estimatedGrams = raw <= 5000 ? Integer.valueOf(raw) : null;
                     boolean bl = amountEstimated = estimatedGrams != null;
                     if (estimatedGrams == null) {
-                        log.warn("[VisionTrace] grams \u503c\u5f02\u5e38: {}, foodName={}", (Object)raw, (Object)foodName);
+                        log.warn("[VisionTrace] grams 值异常: {}, foodName={}", (Object)raw, (Object)foodName);
                     }
                 } else if (g instanceof String && !(s = (String)g).isBlank()) {
                     try {
@@ -4639,11 +4639,11 @@ implements ChatService {
                 foodNameEn = null;
             }
             catch (Exception e2) {
-                throw new BusincessException(StateCode.AI_ERROR, "\u89c6\u89c9\u6a21\u578b\u54cd\u5e94\u89e3\u6790\u5931\u8d25");
+                throw new BusincessException(StateCode.AI_ERROR, "视觉模型响应解析失败");
             }
         }
         if (foodName == null || foodName.isBlank() || foodName.length() > 50) {
-            foodName = "\u672a\u77e5\u98df\u7269";
+            foodName = "未知食物";
         }
         log.info("[VisionTrace] traceId={}, visionRaw={}, foodName={}, estimatedGrams={}, amountEstimated={}", new Object[]{traceId, visionRawContent, foodName, estimatedGrams, amountEstimated});
         HashMap<String, BigDecimal> dbNutrition = null;
@@ -4737,14 +4737,14 @@ implements ChatService {
             String imageUrl = this.fileService.uploadFoodImage(file, userId);
             AiModelConfig.ModelProvider visionProvider = this.resolveVisionProvider(userId);
             if (visionProvider == null) {
-                result.put("error", "\u89c6\u89c9\u6a21\u578b\u672a\u914d\u7f6e");
+                result.put("error", "视觉模型未配置");
                 return result;
             }
             String visionPrompt = switch (type) {
-                case "equipment" -> "\u8bc6\u522b\u56fe\u7247\u4e2d\u7684\u5065\u8eab\u5668\u68b0\u3002\u53ea\u4ece\u4ee5\u4e0b\u5217\u8868\u4e2d\u9009\u62e9\u5339\u914d\u7684\u5668\u68b0\u540d\u79f0\uff08\u53ef\u591a\u4e2a\uff0c\u7528/\u5206\u9694\uff09\uff1a\u6760\u94c3\u3001\u54d1\u94c3\u3001\u9f99\u95e8\u67b6\u3001\u8774\u8776\u673a\u3001\u53f2\u5bc6\u65af\u673a\u3001\u5367\u63a8\u67b6\u3001\u6df1\u8e72\u67b6\u3001\u4e0a\u659c\u51f3\u3001\u4e0b\u659c\u51f3\u3001\u5e73\u51f3\u3001\u63a8\u80f8\u673a\u3001\u63a8\u80a9\u673a\u3001\u9ad8\u4f4d\u4e0b\u62c9\u5668\u3001\u5212\u8239\u673a\u3001\u817f\u4e3e\u673a\u3001\u817f\u5c48\u4f38\u673a\u3001\u817f\u5f2f\u4e3e\u673a\u3001\u54c8\u514b\u6df1\u8e72\u673a\u3001\u5012\u8e6c\u673a\u3001\u63d0\u8e35\u673a\u3001\u9acb\u5916\u5c55\u673a\u3001\u5377\u8179\u673a\u3001\u5f2f\u4e3e\u673a\u3001\u7267\u5e08\u6905\u3001\u5355\u6760\u3001\u53cc\u6760\u3001\u7f57\u9a6c\u6905\u3001\u7ef3\u7d22\u3001\u5f39\u529b\u5e26\u3001\u58f6\u94c3\u3001\u6218\u7ef3\u3001\u836f\u7403\u3001TRX\u3001\u8df3\u7ef3\u3001\u745c\u4f3d\u57ab\u3001\u65e0\u5668\u68b0\u3002\u89c4\u5219\uff1a1.\u53ea\u8fd4\u56de\u5668\u68b0\u540d\u79f0\uff0c\u4e0d\u8981\u8f93\u51fa\u5176\u4ed6\u5185\u5bb9\uff1b2.\u4e0d\u786e\u5b9a\u5c31\u8df3\u8fc7\uff0c\u4e0d\u8981\u731c\u6d4b\uff1b3.\u5982\u679c\u56fe\u7247\u4e0d\u662f\u5065\u8eab\u5668\u68b0\uff0c\u8f93\u51fa\"\u975e\u5065\u8eab\u5668\u68b0\"\u3002";
-                case "nutrition_label" -> "\u8bfb\u53d6\u56fe\u7247\u4e2d\u7684\u8425\u517b\u6210\u5206\u8868/\u6807\u7b7e\uff0c\u8fd4\u56de\u7ed3\u6784\u5316JSON\u3002\u683c\u5f0f\uff1a{\"name\":\"\u98df\u7269\u540d\",\"calories\":\"\u6570\u503c\",\"unit\":\"kJ\u6216kcal\",\"protein\":\"\u6570\u503cg\",\"carbs\":\"\u6570\u503cg\",\"fat\":\"\u6570\u503cg\",\"fiber\":\"\u6570\u503cg\"}\u3002\u53ea\u8f93\u51faJSON\uff0c\u4e0d\u8981\u5176\u4ed6\u5185\u5bb9\u3002";
-                case "form_check" -> "\u5206\u6790\u56fe\u7247\u4e2d\u4eba\u7269\u7684\u52a8\u4f5c\u59ff\u52bf\uff0c\u8fd4\u56deJSON\uff1a{\"exercise\":\"\u52a8\u4f5c\u540d\",\"score\":85,\"issues\":[\"\u95ee\u98981\",\"\u95ee\u98982\"],\"advice\":[\"\u5efa\u8bae1\",\"\u5efa\u8bae2\"]}\u3002\u53ea\u8f93\u51faJSON\u3002";
-                default -> "\u7b80\u8981\u63cf\u8ff0\u56fe\u7247\u5185\u5bb9\uff0c50\u5b57\u4ee5\u5185\u3002";
+                case "equipment" -> "识别图片中的健身器械。只从以下列表中选择匹配的器械名称（可多个，用/分隔）：杠铃、哑铃、龙门架、蝴蝶机、史密斯机、卧推架、深蹲架、上斜凳、下斜凳、平凳、推胸机、推肩机、高位下拉器、划船机、腿举机、腿屈伸机、腿弯举机、哈克深蹲机、倒蹬机、提踵机、髋外展机、卷腹机、弯举机、牧师椅、单杠、双杠、罗马椅、绳索、弹力带、壶铃、战绳、药球、TRX、跳绳、瑜伽垫、无器械。规则：1.只返回器械名称，不要输出其他内容；2.不确定就跳过，不要猜测；3.如果图片不是健身器械，输出\"非健身器械\"。";
+                case "nutrition_label" -> "读取图片中的营养成分表/标签，返回结构化JSON。格式：{\"name\":\"食物名\",\"calories\":\"数值\",\"unit\":\"kJ或kcal\",\"protein\":\"数值g\",\"carbs\":\"数值g\",\"fat\":\"数值g\",\"fiber\":\"数值g\"}。只输出JSON，不要其他内容。";
+                case "form_check" -> "分析图片中人物的动作姿势，返回JSON：{\"exercise\":\"动作名\",\"score\":85,\"issues\":[\"问题1\",\"问题2\"],\"advice\":[\"建议1\",\"建议2\"]}。只输出JSON。";
+                default -> "简要描述图片内容，50字以内。";
             };
             ArrayList<Map<String, Object>> parts = new ArrayList<Map<String, Object>>();
             parts.add(Map.of("type", "text", "text", visionPrompt));
@@ -4762,7 +4762,7 @@ implements ChatService {
             String visionText = this.extractVisionText(visionRes);
             log.info("[RecognizePrepare] userId={}, type={}, visionResult={}, elapsed={}ms", new Object[]{userId, type, visionText, System.currentTimeMillis() - start});
             if (visionText == null || visionText.isBlank()) {
-                result.put("error", "\u672a\u8bc6\u522b\u5230\u6709\u6548\u5185\u5bb9");
+                result.put("error", "未识别到有效内容");
                 return result;
             }
             result.put("imageUrl", imageUrl);
@@ -4802,7 +4802,7 @@ implements ChatService {
         }
         catch (Exception e) {
             log.error("[RecognizePrepare] userId={}, type={}, error={}", new Object[]{userId, type, e.getMessage(), e});
-            result.put("error", "\u8bc6\u522b\u5931\u8d25");
+            result.put("error", "识别失败");
         }
         log.info("[RecognizePrepare] userId={}, type={}, totalElapsed={}ms", new Object[]{userId, type, System.currentTimeMillis() - start});
         return result;
@@ -4821,29 +4821,29 @@ implements ChatService {
             AiModelConfig.ModelProvider summaryProvider = this.aiModelConfig.getByModelName(userChatModel, true);
             if ("equipment".equals(type)) {
                 if (deepThinking) {
-                    systemPrompt = "\u4f60\u662f\u5065\u8eab\u52a9\u624bTatan\uff0c\u62e5\u670910\u5e74\u7ecf\u9a8c\u7684\u4e13\u4e1a\u5065\u8eab\u6559\u7ec3\uff0c\u64c5\u957f\u8fd0\u52a8\u89e3\u5256\u5b66\u548c\u8bad\u7ec3\u79d1\u5b66\u6307\u5bfc\u3002";
-                    aiPrompt = "\u7528\u6237\u4e0a\u4f20\u4e86\u5065\u8eab\u5668\u68b0\u56fe\u7247\uff0c\u8bc6\u522b\u4e3a\u300c" + equipmentName + "\u300d\u3002\u4ee5\u4e0b\u662f\u8054\u7f51\u641c\u7d22\u7684\u8d44\u6599\uff1a\n\n" + (rawData != null && !rawData.isBlank() ? rawData : "\uff08\u672a\u641c\u5230\u76f8\u5173\u8d44\u6599\uff09") + "\n\n\u8bf7\u7ed9\u51fa\u4e13\u4e1a\u7684\u5668\u68b0\u6307\u5bfc\uff1a\u5668\u68b0\u6982\u8ff0\u3001\u8bad\u7ec3\u90e8\u4f4d\uff08\u89e3\u5256\u5b66\u89d2\u5ea6\uff09\u3001\u8be6\u7ec6\u4f7f\u7528\u6b65\u9aa4\uff08\u542b\u547c\u5438\u8282\u594f\u548c\u53d1\u529b\u987a\u5e8f\uff09\u3001\u5e38\u89c1\u9519\u8bef\u4e0e\u7ea0\u6b63\u3001\u8bad\u7ec3\u5efa\u8bae\uff08\u7ec4\u6570/\u6b21\u6570/\u642d\u914d\uff09\u3002";
+                    systemPrompt = "你是健身助手Tatan，拥有10年经验的专业健身教练，擅长运动解剖学和训练科学指导。";
+                    aiPrompt = "用户上传了健身器械图片，识别为「" + equipmentName + "」。以下是联网搜索的资料：\n\n" + (rawData != null && !rawData.isBlank() ? rawData : "（未搜到相关资料）") + "\n\n请给出专业的器械指导：器械概述、训练部位（解剖学角度）、详细使用步骤（含呼吸节奏和发力顺序）、常见错误与纠正、训练建议（组数/次数/搭配）。";
                     maxTokens = 2048;
                     double temperature = 0.6;
                 } else {
-                    systemPrompt = "\u4f60\u662f\u5065\u8eab\u52a9\u624bTatan\uff0c\u64c5\u957f\u7528\u7b80\u6d01\u8bed\u8a00\u89e3\u7b54\u5065\u8eab\u95ee\u9898\u3002";
-                    aiPrompt = "\u7528\u6237\u4e0a\u4f20\u4e86\u5065\u8eab\u5668\u68b0\u56fe\u7247\uff0c\u8bc6\u522b\u4e3a\u300c" + equipmentName + "\u300d\u3002\u4ee5\u4e0b\u662f\u641c\u7d22\u5230\u7684\u8d44\u6599\uff1a\n\n" + (rawData != null && !rawData.isBlank() ? rawData : "\u672a\u641c\u5230\u8d44\u6599") + "\n\n\u8bf7\u6574\u7406\u6210\u7b80\u6d01\u7684\u5668\u68b0\u4ecb\u7ecd\uff08\u8bad\u7ec3\u90e8\u4f4d\u3001\u4f7f\u7528\u65b9\u6cd5\u3001\u6ce8\u610f\u4e8b\u9879\uff09\uff0c\u4e0d\u8d85\u8fc7200\u5b57\u3002";
+                    systemPrompt = "你是健身助手Tatan，擅长用简洁语言解答健身问题。";
+                    aiPrompt = "用户上传了健身器械图片，识别为「" + equipmentName + "」。以下是搜索到的资料：\n\n" + (rawData != null && !rawData.isBlank() ? rawData : "未搜到资料") + "\n\n请整理成简洁的器械介绍（训练部位、使用方法、注意事项），不超过200字。";
                     maxTokens = 512;
                     double temperature = 0.3;
                 }
             } else if ("nutrition_label".equals(type)) {
-                systemPrompt = "\u4f60\u662f\u8425\u517b\u6807\u7b7e\u89e3\u8bfb\u52a9\u624b\u3002";
-                aiPrompt = "\u56fe\u7247\u8425\u517b\u6210\u5206\u8868OCR\u7ed3\u679c\uff1a" + (equipmentName != null ? equipmentName : "\u65e0\u6570\u636e") + "\n\n\u8bf7\u6574\u7406\u6210\u6613\u8bfb\u683c\u5f0f\uff0c\u8bf4\u660e\u6bcf\u4efd\u7684\u70ed\u91cf\u548c\u5404\u8425\u517b\u7d20\u542b\u91cf\u3002";
+                systemPrompt = "你是营养标签解读助手。";
+                aiPrompt = "图片营养成分表OCR结果：" + (equipmentName != null ? equipmentName : "无数据") + "\n\n请整理成易读格式，说明每份的热量和各营养素含量。";
                 maxTokens = 512;
                 double temperature = 0.3;
             } else if ("form_check".equals(type)) {
-                systemPrompt = "\u4f60\u662f\u4e13\u4e1a\u5065\u8eab\u6559\u7ec3\uff0c\u64c5\u957f\u52a8\u4f5c\u5206\u6790\u548c\u59ff\u52bf\u7ea0\u6b63\u3002";
-                aiPrompt = "\u56fe\u7247\u4e2d\u4eba\u7269\u7684\u59ff\u52bf\u5206\u6790\u7ed3\u679c\uff1a" + (equipmentName != null ? equipmentName : "\u65e0\u6570\u636e") + "\n\n\u8bf7\u7ed9\u51fa\u8bc4\u5206\u3001\u95ee\u9898\u6307\u51fa\u548c\u7ea0\u6b63\u5efa\u8bae\uff0c\u8bed\u6c14\u9f13\u52b1\u3002";
+                systemPrompt = "你是专业健身教练，擅长动作分析和姿势纠正。";
+                aiPrompt = "图片中人物的姿势分析结果：" + (equipmentName != null ? equipmentName : "无数据") + "\n\n请给出评分、问题指出和纠正建议，语气鼓励。";
                 maxTokens = 512;
                 double temperature = 0.3;
             } else {
-                systemPrompt = "\u4f60\u662f\u5065\u8eab\u52a9\u624bTatan\u3002";
-                aiPrompt = "\u56fe\u7247\u8bc6\u522b\u7ed3\u679c\uff1a" + (equipmentName != null ? equipmentName : "\u65e0\u6570\u636e") + "\n\n\u8bf7\u7b80\u8981\u56de\u590d\uff0c\u4e0d\u8d85\u8fc7100\u5b57\u3002";
+                systemPrompt = "你是健身助手Tatan。";
+                aiPrompt = "图片识别结果：" + (equipmentName != null ? equipmentName : "无数据") + "\n\n请简要回复，不超过100字。";
                 maxTokens = 256;
                 double temperature = 0.3;
             }
@@ -4852,7 +4852,7 @@ implements ChatService {
                 reply = this.callAiApiStreamWithProvider(systemPrompt, aiPrompt, outputStream, summaryProvider, maxTokens);
             }
             catch (Exception e) {
-                log.error("[RecognizeSummary] AI\u6d41\u5f0f\u8c03\u7528\u5931\u8d25", (Throwable)e);
+                log.error("[RecognizeSummary] AI流式调用失败", (Throwable)e);
                 reply = null;
             }
             long aiElapsed = System.currentTimeMillis() - aiStart;
@@ -4861,7 +4861,7 @@ implements ChatService {
         catch (Exception e) {
             log.error("[RecognizeSummary] userId={}, type={}, error={}", new Object[]{userId, type, e.getMessage(), e});
             try {
-                this.writeSseEvent(outputStream, "error", "{\"message\":\"\u751f\u6210\u5931\u8d25\"}");
+                this.writeSseEvent(outputStream, "error", "{\"message\":\"生成失败\"}");
             }
             catch (Exception exception) {
                 // empty catch block
@@ -4913,39 +4913,39 @@ implements ChatService {
             String imageUrl = this.fileService.uploadFoodImage(file, userId);
             AiModelConfig.ModelProvider visionProvider = this.resolveVisionProvider(userId);
             if (visionProvider == null) {
-                throw new BusincessException(StateCode.AI_ERROR, "\u89c6\u89c9\u6a21\u578b\u672a\u914d\u7f6e");
+                throw new BusincessException(StateCode.AI_ERROR, "视觉模型未配置");
             }
-            String visionPrompt = "\u8bc6\u522b\u56fe\u7247\u4e2d\u7684\u5065\u8eab\u5668\u68b0\uff0c\u53ea\u8fd4\u56de\u5668\u68b0\u540d\u79f0\uff0c\u4e0d\u8981\u8f93\u51fa\u5176\u4ed6\u5185\u5bb9\u3002\u53ea\u8f93\u51fa\u540d\u79f0\uff0c\u4e0d\u8981\u8f93\u51fa\u4efb\u4f55\u89e3\u91ca\u6216JSON\u3002\u5982\u679c\u56fe\u7247\u4e0d\u662f\u5065\u8eab\u5668\u68b0\uff0c\u8f93\u51fa\"\u975e\u5065\u8eab\u5668\u68b0\"\u3002";
+            String visionPrompt = "识别图片中的健身器械，只返回器械名称，不要输出其他内容。只输出名称，不要输出任何解释或JSON。如果图片不是健身器械，输出\"非健身器械\"。";
             ArrayList<Map<String, Object>> parts = new ArrayList<Map<String, Object>>();
             parts.add(Map.of("type", "text", "text", visionPrompt));
             parts.add(Map.of("type", "image_url", "image_url", Map.of("url", imageUrl)));
             Map<String, Object> visionRes = this.aiCallHelper.callVision(visionProvider, parts, 256, 0.0);
             String equipmentName = this.extractVisionText(visionRes);
-            if (equipmentName == null || equipmentName.isBlank() || "\u975e\u5065\u8eab\u5668\u68b0".equals(equipmentName)) {
-                result.put("textReply", "\u672a\u8bc6\u522b\u5230\u5065\u8eab\u5668\u68b0");
+            if (equipmentName == null || equipmentName.isBlank() || "非健身器械".equals(equipmentName)) {
+                result.put("textReply", "未识别到健身器械");
                 return result;
             }
-            // AI\u53ef\u80fd\u8fd4\u56de"\u8774\u8776\u673a/\u5939\u80f8\u673a"\uff0c\u6309/\u6216\uff0f\u62c6\u5206\uff0c\u53d6\u7b2c\u4e00\u4e2a\u4f5c\u4e3a\u4e3b\u540d\u79f0
-            String[] nameParts = equipmentName.split("[/\uff0f]");
+            // AI可能返回"蝴蝶机/夹胸机"，按/或／拆分，取第一个作为主名称
+            String[] nameParts = equipmentName.split("[/／]");
             String primaryEquipmentName = nameParts[0].trim();
             if (primaryEquipmentName.isBlank()) {
                 primaryEquipmentName = equipmentName;
             }
             if (nameParts.length > 1) {
-                log.info("[EquipmentRecognition] userId={}, \u5668\u68b0\u540d\u62c6\u5206: '{}' -> '{}'", userId, equipmentName, primaryEquipmentName);
+                log.info("[EquipmentRecognition] userId={}, 器械名拆分: '{}' -> '{}'", userId, equipmentName, primaryEquipmentName);
             }
             equipmentName = primaryEquipmentName;
             log.info("[EquipmentRecognition] userId={}, visionResult={}, elapsed={}ms", new Object[]{userId, equipmentName, System.currentTimeMillis() - start});
             String rawSearch = this.webSearchHelper.searchEquipmentInfo(equipmentName);
             log.info("[EquipmentRecognition] userId={}, searchDone={}, elapsed={}ms", new Object[]{userId, rawSearch != null ? "success" : "null", System.currentTimeMillis() - start});
             if (deepThinking) {
-                systemPrompt = "\u4f60\u662f\u5065\u8eab\u52a9\u624bTatan\uff0c\u4e00\u4f4d\u62e5\u670910\u5e74\u7ecf\u9a8c\u7684\u4e13\u4e1a\u5065\u8eab\u6559\u7ec3\u3002\u4f60\u5bf9\u5404\u7c7b\u5065\u8eab\u5668\u68b0\u4e86\u5982\u6307\u638c\uff0c\n\u80fd\u591f\u4ece\u8fd0\u52a8\u89e3\u5256\u5b66\u3001\u751f\u7269\u529b\u5b66\u548c\u8bad\u7ec3\u79d1\u5b66\u7684\u89d2\u5ea6\u7ed9\u51fa\u4e13\u4e1a\u7684\u6307\u5bfc\u5efa\u8bae\u3002\n\u4f60\u5584\u4e8e\u7528\u901a\u4fd7\u6613\u61c2\u4f46\u4e13\u4e1a\u51c6\u786e\u7684\u8bed\u8a00\u89e3\u91ca\u5668\u68b0\u4f7f\u7528\u65b9\u6cd5\uff0c\u5e76\u7ed9\u51fa\u9488\u5bf9\u6027\u7684\u8bad\u7ec3\u5efa\u8bae\u3002\n";
-                aiPrompt = rawSearch != null && !rawSearch.isBlank() ? "\u7528\u6237\u4e0a\u4f20\u4e86\u4e00\u5f20\u5065\u8eab\u5668\u68b0\u56fe\u7247\uff0c\u89c6\u89c9\u6a21\u578b\u8bc6\u522b\u4e3a\u300c%s\u300d\u3002\n\u4ee5\u4e0b\u662f\u8054\u7f51\u641c\u7d22\u5230\u7684\u539f\u59cb\u8d44\u6599\uff1a\n\n%s\n\n\u8bf7\u57fa\u4e8e\u4ee5\u4e0a\u8d44\u6599\u548c\u4f60\u7684\u4e13\u4e1a\u77e5\u8bc6\uff0c\u5b8c\u6210\u4ee5\u4e0b\u4efb\u52a1\uff1a\n\n## 1. \u5668\u68b0\u6982\u8ff0\n\u7b80\u8981\u4ecb\u7ecd\u8be5\u5668\u68b0\u7684\u57fa\u672c\u4fe1\u606f\u3001\u9002\u7528\u4eba\u7fa4\u3001\u8bad\u7ec3\u6548\u679c\u3002\n\n## 2. \u7cbe\u51c6\u8bad\u7ec3\u90e8\u4f4d\n\u4ece\u89e3\u5256\u5b66\u89d2\u5ea6\u5206\u6790\u8be5\u5668\u68b0\u4e3b\u8981\u953b\u70bc\u7684\u808c\u7fa4\uff08\u533a\u5206\u4e3b\u52a8\u808c\u3001\u534f\u540c\u808c\u3001\u7a33\u5b9a\u808c\uff09\uff0c\n\u5e76\u8bf4\u660e\u4e0d\u540c\u63e1\u59ff/\u7ad9\u59ff/\u5ea7\u6905\u4f4d\u7f6e\u5bf9\u76ee\u6807\u808c\u7fa4\u7684\u5f71\u54cd\u3002\n\n## 3. \u8be6\u7ec6\u4f7f\u7528\u6b65\u9aa4\n\u5206\u6b65\u9aa4\u8bf4\u660e\u6b63\u786e\u7684\u4f7f\u7528\u65b9\u6cd5\uff0c\u5305\u62ec\uff1a\n- \u521d\u59cb\u8c03\u8282\uff08\u5ea7\u6905\u9ad8\u5ea6\u3001\u9760\u80cc\u89d2\u5ea6\u3001\u914d\u91cd\u9009\u62e9\uff09\n- \u52a8\u4f5c\u6267\u884c\uff08\u547c\u5438\u8282\u594f\u3001\u53d1\u529b\u987a\u5e8f\u3001\u9876\u5cf0\u6536\u7f29\uff09\n- \u8fd8\u539f\u63a7\u5236\uff08\u79bb\u5fc3\u9636\u6bb5\u6ce8\u610f\u4e8b\u9879\uff09\n\n## 4. \u5e38\u89c1\u9519\u8bef\u4e0e\u7ea0\u6b63\n\u5217\u4e3e3-5\u4e2a\u65b0\u624b\u6700\u5e38\u72af\u7684\u9519\u8bef\u52a8\u4f5c\uff0c\u5e76\u7ed9\u51fa\u7ea0\u6b63\u65b9\u6cd5\u3002\n\n## 5. \u8bad\u7ec3\u5efa\u8bae\n\u63a8\u8350\u9002\u5408\u7684\u7ec4\u6570\u3001\u6b21\u6570\u3001\u4f11\u606f\u65f6\u95f4\uff0c\u4ee5\u53ca\u5982\u4f55\u4e0e\u5176\u4ed6\u52a8\u4f5c\u642d\u914d\u3002\n".formatted(equipmentName, rawSearch) : "\u7528\u6237\u4e0a\u4f20\u4e86\u4e00\u5f20\u5065\u8eab\u5668\u68b0\u56fe\u7247\uff0c\u8bc6\u522b\u4e3a\u300c%s\u300d\uff0c\u4f46\u8054\u7f51\u641c\u7d22\u672a\u67e5\u5230\u76f8\u5173\u8d44\u6599\u3002\n\u8bf7\u5b8c\u5168\u4f9d\u9760\u4f60\u7684\u4e13\u4e1a\u77e5\u8bc6\uff0c\u7ed9\u51fa\u8be6\u5c3d\u7684\u5668\u68b0\u4ecb\u7ecd\u548c\u4f7f\u7528\u6307\u5bfc\u3002\n\n\u8981\u6c42\u8986\u76d6\uff1a\u5668\u68b0\u6982\u8ff0\u3001\u8bad\u7ec3\u90e8\u4f4d\uff08\u89e3\u5256\u5b66\u89d2\u5ea6\uff09\u3001\u8be6\u7ec6\u4f7f\u7528\u6b65\u9aa4\u3001\u5e38\u89c1\u9519\u8bef\u4e0e\u7ea0\u6b63\u3001\u8bad\u7ec3\u5efa\u8bae\u3002\n\u5982\u679c\u5bf9\u8be5\u5668\u68b0\u4e0d\u592a\u786e\u5b9a\uff0c\u8bda\u5b9e\u8bf4\u660e\u5e76\u5efa\u8bae\u7528\u6237\u5728B\u7ad9\u641c\u7d22\u8be5\u5668\u68b0\u7684\u6559\u7a0b\u89c6\u9891\u3002\n".formatted(equipmentName);
+                systemPrompt = "你是健身助手Tatan，一位拥有10年经验的专业健身教练。你对各类健身器械了如指掌，\n能够从运动解剖学、生物力学和训练科学的角度给出专业的指导建议。\n你善于用通俗易懂但专业准确的语言解释器械使用方法，并给出针对性的训练建议。\n";
+                aiPrompt = rawSearch != null && !rawSearch.isBlank() ? "用户上传了一张健身器械图片，视觉模型识别为「%s」。\n以下是联网搜索到的原始资料：\n\n%s\n\n请基于以上资料和你的专业知识，完成以下任务：\n\n## 1. 器械概述\n简要介绍该器械的基本信息、适用人群、训练效果。\n\n## 2. 精准训练部位\n从解剖学角度分析该器械主要锻炼的肌群（区分主动肌、协同肌、稳定肌），\n并说明不同握姿/站姿/座椅位置对目标肌群的影响。\n\n## 3. 详细使用步骤\n分步骤说明正确的使用方法，包括：\n- 初始调节（座椅高度、靠背角度、配重选择）\n- 动作执行（呼吸节奏、发力顺序、顶峰收缩）\n- 还原控制（离心阶段注意事项）\n\n## 4. 常见错误与纠正\n列举3-5个新手最常犯的错误动作，并给出纠正方法。\n\n## 5. 训练建议\n推荐适合的组数、次数、休息时间，以及如何与其他动作搭配。\n".formatted(equipmentName, rawSearch) : "用户上传了一张健身器械图片，识别为「%s」，但联网搜索未查到相关资料。\n请完全依靠你的专业知识，给出详尽的器械介绍和使用指导。\n\n要求覆盖：器械概述、训练部位（解剖学角度）、详细使用步骤、常见错误与纠正、训练建议。\n如果对该器械不太确定，诚实说明并建议用户在B站搜索该器械的教程视频。\n".formatted(equipmentName);
                 maxTokens = 2048;
                 temperature = 0.6;
             } else {
-                systemPrompt = "\u4f60\u662f\u5065\u8eab\u52a9\u624bTatan\uff0c\u64c5\u957f\u7528\u7b80\u6d01\u6613\u61c2\u7684\u8bed\u8a00\u89e3\u7b54\u5065\u8eab\u76f8\u5173\u95ee\u9898\u3002";
-                aiPrompt = rawSearch != null && !rawSearch.isBlank() ? "\u7528\u6237\u4e0a\u4f20\u4e86\u4e00\u5f20\u5065\u8eab\u5668\u68b0\u56fe\u7247\uff0c\u8bc6\u522b\u4e3a\u300c" + equipmentName + "\u300d\u3002\u4ee5\u4e0b\u662f\u8054\u7f51\u641c\u7d22\u5230\u7684\u8d44\u6599\uff0c\u8bf7\u6574\u7406\u6210\u7b80\u6d01\u7684\u5668\u68b0\u4ecb\u7ecd\uff1a\n\n" + rawSearch + "\n\n\u8981\u6c42\uff1a\u53ea\u4fdd\u7559\u6838\u5fc3\u7684\u8bad\u7ec3\u90e8\u4f4d\u3001\u4f7f\u7528\u65b9\u6cd5\u3001\u6ce8\u610f\u4e8b\u9879\uff0c\u4e0d\u8d85\u8fc7200\u5b57\u3002" : "\u7528\u6237\u4e0a\u4f20\u4e86\u4e00\u5f20\u5065\u8eab\u5668\u68b0\u56fe\u7247\uff0c\u8bc6\u522b\u4e3a\u300c" + equipmentName + "\u300d\uff0c\u8054\u7f51\u672a\u641c\u5230\u8d44\u6599\u3002\u8bf7\u6839\u636e\u77e5\u8bc6\u7b80\u8981\u4ecb\u7ecd\u8be5\u5668\u68b0\uff0c\u4e0d\u8d85\u8fc7150\u5b57\u3002\u5982\u679c\u4e0d\u786e\u5b9a\uff0c\u5efa\u8bae\u7528\u6237\u5728B\u7ad9\u641c\u7d22\u6559\u7a0b\u3002";
+                systemPrompt = "你是健身助手Tatan，擅长用简洁易懂的语言解答健身相关问题。";
+                aiPrompt = rawSearch != null && !rawSearch.isBlank() ? "用户上传了一张健身器械图片，识别为「" + equipmentName + "」。以下是联网搜索到的资料，请整理成简洁的器械介绍：\n\n" + rawSearch + "\n\n要求：只保留核心的训练部位、使用方法、注意事项，不超过200字。" : "用户上传了一张健身器械图片，识别为「" + equipmentName + "」，联网未搜到资料。请根据知识简要介绍该器械，不超过150字。如果不确定，建议用户在B站搜索教程。";
                 maxTokens = 512;
                 temperature = 0.3;
             }
@@ -4972,8 +4972,8 @@ implements ChatService {
             }
         }
         catch (Exception e) {
-            log.error("\u5668\u68b0\u8bc6\u522b\u5931\u8d25", (Throwable)e);
-            result.put("textReply", "\u5668\u68b0\u8bc6\u522b\u5931\u8d25\uff0c\u8bf7\u91cd\u8bd5");
+            log.error("器械识别失败", (Throwable)e);
+            result.put("textReply", "器械识别失败，请重试");
         }
         log.info("[EquipmentRecognition] userId={}, totalElapsed={}ms", (Object)userId, (Object)(System.currentTimeMillis() - start));
         return result;
@@ -4986,51 +4986,51 @@ implements ChatService {
             String imageUrl = this.fileService.uploadFoodImage(file, userId);
             AiModelConfig.ModelProvider visionProvider = this.resolveVisionProvider(userId);
             if (visionProvider == null) {
-                throw new BusincessException(StateCode.AI_ERROR, "\u89c6\u89c9\u6a21\u578b\u672a\u914d\u7f6e");
+                throw new BusincessException(StateCode.AI_ERROR, "视觉模型未配置");
             }
-            String prompt = "\u8bfb\u53d6\u56fe\u7247\u4e2d\u7684\u8425\u517b\u6210\u5206\u8868/\u6807\u7b7e\uff0c\u8fd4\u56de\u7ed3\u6784\u5316 JSON\u3002\n\u53ea\u8f93\u51fa JSON\uff0c\u4e0d\u8981 markdown\uff0c\u4e0d\u8981\u89e3\u91ca\uff0c\u4e0d\u8981\u4ee3\u7801\u5757\u3002\n\u683c\u5f0f\uff1a{\"name\":\"\u98df\u7269\u540d\",\"calories\":\"\u6570\u503c\",\"caloriesUnit\":\"kJ\u6216kcal\",\"protein\":\"\u6570\u503cg\",\"carbs\":\"\u6570\u503cg\",\"fat\":\"\u6570\u503cg\",\"fiber\":\"\u6570\u503cg\",\"sodium\":\"\u6570\u503cg\"}\n\u89c4\u5219\uff1a\n1. \u4ed4\u7ec6\u8bfb\u53d6\u6807\u7b7e\u4e0a\u7684\u6bcf\u4e00\u9879\u6570\u636e\uff0c\u5305\u62ec\u70ed\u91cf\u3001\u86cb\u767d\u8d28\u3001\u78b3\u6c34\u5316\u5408\u7269\u3001\u8102\u80aa\u3001\u81b3\u98df\u7ea4\u7ef4\u3001\u94a0\u7b49\u3002\n2. caloriesUnit \u4fdd\u7559\u539f\u59cb\u5355\u4f4d\uff08kJ \u6216 kcal\uff09\u3002\n3. \u5982\u679c\u56fe\u7247\u4e0d\u662f\u8425\u517b\u6210\u5206\u8868\uff0c\u8fd4\u56de {\"error\":\"not_nutrition_label\"}\n";
+            String prompt = "读取图片中的营养成分表/标签，返回结构化 JSON。\n只输出 JSON，不要 markdown，不要解释，不要代码块。\n格式：{\"name\":\"食物名\",\"calories\":\"数值\",\"caloriesUnit\":\"kJ或kcal\",\"protein\":\"数值g\",\"carbs\":\"数值g\",\"fat\":\"数值g\",\"fiber\":\"数值g\",\"sodium\":\"数值g\"}\n规则：\n1. 仔细读取标签上的每一项数据，包括热量、蛋白质、碳水化合物、脂肪、膳食纤维、钠等。\n2. caloriesUnit 保留原始单位（kJ 或 kcal）。\n3. 如果图片不是营养成分表，返回 {\"error\":\"not_nutrition_label\"}\n";
             ArrayList<Map<String, Object>> parts = new ArrayList<Map<String, Object>>();
             parts.add(Map.of("type", "text", "text", prompt));
             parts.add(Map.of("type", "image_url", "image_url", Map.of("url", imageUrl)));
             Map<String, Object> visionRes = this.aiCallHelper.callVision(visionProvider, parts, 512, 0.0);
             String content = this.extractVisionRaw(visionRes);
             if (content == null) {
-                result.put("textReply", "\u6807\u7b7e\u8bc6\u522b\u5931\u8d25");
+                result.put("textReply", "标签识别失败");
                 return result;
             }
             String cleaned = content.replaceAll("^\\s*```(?:json)?\\s*", "").replaceAll("\\s*```\\s*$", "").trim();
             int js = cleaned.indexOf("{");
             int je = cleaned.lastIndexOf("}");
             if (js < 0 || je < js) {
-                result.put("textReply", "\u6807\u7b7e\u8bc6\u522b\u5931\u8d25");
+                result.put("textReply", "标签识别失败");
                 return result;
             }
             String jsonPart = cleaned.substring(js, je + 1);
             Map parsed = (Map)JSON_MAPPER.readValue(jsonPart, Map.class);
             if (parsed.containsKey("error")) {
-                result.put("textReply", "\u56fe\u7247\u4e2d\u672a\u68c0\u6d4b\u5230\u8425\u517b\u6210\u5206\u8868");
+                result.put("textReply", "图片中未检测到营养成分表");
                 return result;
             }
             StringBuilder sb = new StringBuilder();
-            sb.append("\u8425\u517b\u6807\u7b7e\u8bfb\u53d6\u7ed3\u679c\uff1a\n");
-            sb.append("\u98df\u7269\uff1a").append(this.toCleanString(parsed.get("name"))).append("\n");
-            sb.append("\u70ed\u91cf\uff1a").append(this.toCleanString(parsed.get("calories"))).append(" ").append(this.toCleanString(parsed.get("caloriesUnit"))).append("\n");
-            sb.append("\u86cb\u767d\u8d28\uff1a").append(this.toCleanString(parsed.get("protein"))).append("\n");
-            sb.append("\u78b3\u6c34\u5316\u5408\u7269\uff1a").append(this.toCleanString(parsed.get("carbs"))).append("\n");
-            sb.append("\u8102\u80aa\uff1a").append(this.toCleanString(parsed.get("fat"))).append("\n");
+            sb.append("营养标签读取结果：\n");
+            sb.append("食物：").append(this.toCleanString(parsed.get("name"))).append("\n");
+            sb.append("热量：").append(this.toCleanString(parsed.get("calories"))).append(" ").append(this.toCleanString(parsed.get("caloriesUnit"))).append("\n");
+            sb.append("蛋白质：").append(this.toCleanString(parsed.get("protein"))).append("\n");
+            sb.append("碳水化合物：").append(this.toCleanString(parsed.get("carbs"))).append("\n");
+            sb.append("脂肪：").append(this.toCleanString(parsed.get("fat"))).append("\n");
             if (parsed.get("fiber") != null) {
-                sb.append("\u81b3\u98df\u7ea4\u7ef4\uff1a").append(this.toCleanString(parsed.get("fiber"))).append("\n");
+                sb.append("膳食纤维：").append(this.toCleanString(parsed.get("fiber"))).append("\n");
             }
             if (parsed.get("sodium") != null) {
-                sb.append("\u94a0\uff1a").append(this.toCleanString(parsed.get("sodium"))).append("\n");
+                sb.append("钠：").append(this.toCleanString(parsed.get("sodium"))).append("\n");
             }
             result.put("textReply", sb.toString());
             result.put("imageUrl", imageUrl);
             result.put("labelData", parsed);
         }
         catch (Exception e) {
-            log.error("\u8425\u517b\u6807\u7b7e\u8bc6\u522b\u5931\u8d25", (Throwable)e);
-            result.put("textReply", "\u6807\u7b7e\u8bc6\u522b\u5931\u8d25\uff0c\u8bf7\u91cd\u8bd5");
+            log.error("营养标签识别失败", (Throwable)e);
+            result.put("textReply", "标签识别失败，请重试");
         }
         log.info("[NutritionLabelRecognition] userId={}, elapsed={}ms", (Object)userId, (Object)(System.currentTimeMillis() - start));
         return result;
@@ -5043,24 +5043,24 @@ implements ChatService {
             String imageUrl = this.fileService.uploadFoodImage(file, userId);
             AiModelConfig.ModelProvider visionProvider = this.resolveVisionProvider(userId);
             if (visionProvider == null) {
-                throw new BusincessException(StateCode.AI_ERROR, "\u89c6\u89c9\u6a21\u578b\u672a\u914d\u7f6e");
+                throw new BusincessException(StateCode.AI_ERROR, "视觉模型未配置");
             }
-            String prompt = "\u4f60\u662f\u4e13\u4e1a\u5065\u8eab\u6559\u7ec3\u3002\u5206\u6790\u56fe\u7247\u4e2d\u4eba\u7269\u7684\u5065\u8eab\u52a8\u4f5c\u59ff\u52bf\u3002\n\u8bf7\u7ed9\u51fa\u4ee5\u4e0b\u5185\u5bb9\uff1a\n1. \u8bc6\u522b\u51fa\u6b63\u5728\u6267\u884c\u7684\u52a8\u4f5c\u540d\u79f0\n2. \u8bc4\u4f30\u59ff\u52bf\u662f\u5426\u6b63\u786e\uff08\u63091-10\u5206\uff09\n3. \u5982\u679c\u6709\u95ee\u9898\uff0c\u6307\u51fa\u5177\u4f53\u54ea\u91cc\u4e0d\u5bf9\n4. \u7ed9\u51fa\u7ea0\u6b63\u5efa\u8bae\n\u7528\u7b80\u6d01\u7684\u4e2d\u6587\u56de\u7b54\u3002\u5982\u679c\u56fe\u7247\u4e2d\u6ca1\u6709\u4eba\u6216\u6ca1\u6709\u5728\u505a\u8fd0\u52a8\uff0c\u56de\u590d\"\u672a\u68c0\u6d4b\u5230\u5065\u8eab\u52a8\u4f5c\"\u3002\n";
+            String prompt = "你是专业健身教练。分析图片中人物的健身动作姿势。\n请给出以下内容：\n1. 识别出正在执行的动作名称\n2. 评估姿势是否正确（按1-10分）\n3. 如果有问题，指出具体哪里不对\n4. 给出纠正建议\n用简洁的中文回答。如果图片中没有人或没有在做运动，回复\"未检测到健身动作\"。\n";
             ArrayList<Map<String, Object>> parts = new ArrayList<Map<String, Object>>();
             parts.add(Map.of("type", "text", "text", prompt));
             parts.add(Map.of("type", "image_url", "image_url", Map.of("url", imageUrl)));
             Map<String, Object> visionRes = this.aiCallHelper.callVision(visionProvider, parts, 1024, 0.3);
             String content = this.extractVisionRaw(visionRes);
             if (content == null || content.isBlank()) {
-                result.put("textReply", "\u59ff\u52bf\u5206\u6790\u5931\u8d25\uff0c\u8bf7\u91cd\u8bd5");
+                result.put("textReply", "姿势分析失败，请重试");
                 return result;
             }
             result.put("textReply", content);
             result.put("imageUrl", imageUrl);
         }
         catch (Exception e) {
-            log.error("\u59ff\u52bf\u7ea0\u9519\u5931\u8d25", (Throwable)e);
-            result.put("textReply", "\u59ff\u52bf\u5206\u6790\u5931\u8d25\uff0c\u8bf7\u91cd\u8bd5");
+            log.error("姿势纠错失败", (Throwable)e);
+            result.put("textReply", "姿势分析失败，请重试");
         }
         log.info("[FormCheckRecognition] userId={}, elapsed={}ms", (Object)userId, (Object)(System.currentTimeMillis() - start));
         return result;
@@ -5073,24 +5073,24 @@ implements ChatService {
             String imageUrl = this.fileService.uploadFoodImage(file, userId);
             AiModelConfig.ModelProvider visionProvider = this.resolveVisionProvider(userId);
             if (visionProvider == null) {
-                throw new BusincessException(StateCode.AI_ERROR, "\u89c6\u89c9\u6a21\u578b\u672a\u914d\u7f6e");
+                throw new BusincessException(StateCode.AI_ERROR, "视觉模型未配置");
             }
-            String prompt = "\u4f60\u662f\u5065\u8eab\u52a9\u624bTatan\u3002\u7528\u6237\u4e0a\u4f20\u4e86\u4e00\u5f20\u56fe\u7247\u5e76\u9644\u5e26\u4e86\u63cf\u8ff0\uff1a\"%s\"\n\u8bf7\u6839\u636e\u56fe\u7247\u5185\u5bb9\u548c\u7528\u6237\u63cf\u8ff0\uff0c\u5224\u65ad\u662f\u5426\u80fd\u63d0\u4f9b\u4e0e\u5065\u8eab\u3001\u996e\u98df\u76f8\u5173\u7684\u5e2e\u52a9\u3002\n\u5982\u679c\u53ef\u4ee5\uff0c\u7ed9\u51fa\u76f8\u5173\u5efa\u8bae\uff08\u5982\u98df\u7269\u8425\u517b\u4f30\u7b97\u3001\u5668\u68b0\u4f7f\u7528\u3001\u8bad\u7ec3\u5efa\u8bae\u7b49\uff09\u3002\n\u5982\u679c\u4e0e\u5065\u8eab\u996e\u98df\u5b8c\u5168\u65e0\u5173\uff0c\u56de\u590d\"\u6211\u65e0\u6cd5\u5904\u7406\u8fd9\u4e2a\u95ee\u9898\"\u3002\n\u7528\u7b80\u6d01\u7684\u4e2d\u6587\u56de\u7b54\u3002\n".formatted(customText != null ? customText : "");
+            String prompt = "你是健身助手Tatan。用户上传了一张图片并附带了描述：\"%s\"\n请根据图片内容和用户描述，判断是否能提供与健身、饮食相关的帮助。\n如果可以，给出相关建议（如食物营养估算、器械使用、训练建议等）。\n如果与健身饮食完全无关，回复\"我无法处理这个问题\"。\n用简洁的中文回答。\n".formatted(customText != null ? customText : "");
             ArrayList<Map<String, Object>> parts = new ArrayList<Map<String, Object>>();
             parts.add(Map.of("type", "text", "text", prompt));
             parts.add(Map.of("type", "image_url", "image_url", Map.of("url", imageUrl)));
             Map<String, Object> visionRes = this.aiCallHelper.callVision(visionProvider, parts, 1024, 0.3);
             String content = this.extractVisionRaw(visionRes);
             if (content == null || content.isBlank()) {
-                result.put("textReply", "\u6211\u65e0\u6cd5\u5904\u7406\u8fd9\u4e2a\u95ee\u9898");
+                result.put("textReply", "我无法处理这个问题");
                 return result;
             }
             result.put("textReply", content);
             result.put("imageUrl", imageUrl);
         }
         catch (Exception e) {
-            log.error("other\u56fe\u7247\u8bc6\u522b\u5931\u8d25", (Throwable)e);
-            result.put("textReply", "\u8bc6\u522b\u5931\u8d25\uff0c\u8bf7\u91cd\u8bd5");
+            log.error("other图片识别失败", (Throwable)e);
+            result.put("textReply", "识别失败，请重试");
         }
         log.info("[OtherImageRecognition] userId={}, elapsed={}ms", (Object)userId, (Object)(System.currentTimeMillis() - start));
         return result;
@@ -5166,13 +5166,13 @@ implements ChatService {
             cal = Math.round(cal * 4.184);
             nutrition.put("calories", cal);
             if (fat > 0.0 && fat * 9.0 * 4.184 > cal * 1.5) {
-                log.warn("\u98df\u7269\u8425\u517b\u6570\u636e\u6821\u9a8c\u5931\u8d25\uff08\u70ed\u91cf\u4e0e\u8102\u80aa\u4e0d\u5339\u914d\uff09: foodName={}, calories={}kJ, fat={}g", new Object[]{foodName, cal, fat});
+                log.warn("食物营养数据校验失败（热量与脂肪不匹配）: foodName={}, calories={}kJ, fat={}g", new Object[]{foodName, cal, fat});
             }
             debugTimings.put("nutritionParsedAtMs", System.currentTimeMillis());
             return result;
         }
         catch (Exception e) {
-            log.warn("\u98df\u7269\u8425\u517b\u641c\u7d22\u5931\u8d25: foodName={}, error={}", (Object)foodName, (Object)e.getMessage());
+            log.warn("食物营养搜索失败: foodName={}, error={}", (Object)foodName, (Object)e.getMessage());
             debugTimings.put("nutritionSearchFailedAtMs", System.currentTimeMillis());
             debugTimings.put("nutritionSearchError", e.getMessage());
             return null;
