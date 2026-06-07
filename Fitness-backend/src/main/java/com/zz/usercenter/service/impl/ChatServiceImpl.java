@@ -4130,8 +4130,11 @@ implements ChatService {
         ArrayList<DietFoodItemRequest> matchedItems = new ArrayList<DietFoodItemRequest>();
         LinkedHashSet<Long> seenFoodIds = new LinkedHashSet<Long>();
         String normalizedLine = rawDescription.replace("以及", "+").replace("还有", "+").replace("并且", "+").replace("然后", "+").replace("再加", "+").replace("搭配", "+").replace("配", "+").replace("和", "+").replace("、", "+").replace("，", "+").replace(",", "+");
+        log.info("【食物匹配】rawDescription={}, normalizedLine={}", rawDescription, normalizedLine);
         for (ParsedFoodAmount parsed : this.parseDietFoodLine(normalizedLine)) {
+            log.info("【食物匹配】parsed: name={}, amount={}", parsed.name(), parsed.amount());
             FoodItem foodItem = this.findStrictVisibleFood(userId, parsed.name());
+            log.info("【食物匹配】name={}, matched={}", parsed.name(), foodItem != null ? foodItem.getName() : "null");
             if (foodItem == null || foodItem.getId() == null || !seenFoodIds.add(foodItem.getId())) continue;
             DietFoodItemRequest request = new DietFoodItemRequest();
             request.setFoodItemId(foodItem.getId());
