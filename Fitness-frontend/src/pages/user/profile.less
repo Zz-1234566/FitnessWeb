@@ -8,7 +8,7 @@
 
 .profile-container {
   width: 100%;
-  max-width: 1020px;
+  max-width: var(--page-max);
   margin: 0 auto;
   padding: var(--page-pad-top) 40px var(--page-pad-bottom);
   position: relative;
@@ -1985,6 +1985,20 @@
   cursor: pointer;
   opacity: 0.5;
   transition: all 0.2s ease;
+
+  &:hover {
+    opacity: 1;
+    color: var(--brand);
+  }
+}
+
+.ai-profile-mobile-edit {
+  font-size: 20px;
+  color: var(--text-3);
+  cursor: pointer;
+  opacity: 0.6;
+  transition: opacity 0.2s ease;
+  margin-bottom: 8px;
 
   &:hover {
     opacity: 1;

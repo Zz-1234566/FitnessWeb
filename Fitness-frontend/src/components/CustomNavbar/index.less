@@ -156,11 +156,23 @@
     transition: all 0.25s ease;
   }
 
+  .nav-svg-icon {
+    width: 17px;
+    height: 17px;
+    flex-shrink: 0;
+    filter: brightness(0.55) saturate(1.5);
+    transition: filter 0.25s ease;
+  }
+
   &.active {
     color: var(--text);
 
     :global(.anticon) {
       font-size: 18px;
+    }
+
+    .nav-svg-icon {
+      filter: brightness(0.4) saturate(1.8);
     }
   }
 

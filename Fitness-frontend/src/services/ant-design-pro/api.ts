@@ -60,12 +60,15 @@ export async function sendChatMessageStream(
   onDone: (fullText: string) => void,
   onError: (err: Error) => void,
   onMeta?: (meta: ChatStreamMeta) => void,
+  signal?: AbortSignal,
+  onStatus?: (status: string) => void,
 ): Promise<void> {
   const res = await fetch('/api/chat/send/stream', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     credentials: 'include',
     body: JSON.stringify(body),
+    signal,
   });
 
   if (!res.ok) {
@@ -106,6 +109,14 @@ export async function sendChatMessageStream(
       return;
     }
 
+    if (eventName === 'status') {
+      try {
+        const parsed = JSON.parse(rawData);
+        if (parsed.status) onStatus?.(parsed.status);
+      } catch {}
+      return;
+    }
+
     const content = rawData.replace(/\\n/g, '\n');
     if (content) {
       fullText += content;
@@ -131,6 +142,78 @@ export async function sendChatMessageStream(
     }
     onDone(fullText);
   } catch (e) {
+    if ((e as Error)?.name === 'AbortError') return;
+    onError(e instanceof Error ? e : new Error('流式请求异常'));
+  } finally {
+    reader.releaseLock();
+  }
+}
+
+/** 图片识别 SSE 总结流（只推送最终 AI 总结文本） */
+export async function recognizeSummaryStream(
+  body: { equipmentName: string; rawData: string; type: string; deepThinking: boolean },
+  onChunk: (text: string) => void,
+  onDone: (fullText: string) => void,
+  onError: (err: Error) => void,
+): Promise<void> {
+  const res = await fetch('/api/chat/recognize-stream', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) {
+    onError(new Error('请求失败: ' + res.status));
+    return;
+  }
+
+  const reader = res.body!.getReader();
+  const decoder = new TextDecoder();
+  let fullText = '';
+  let buffer = '';
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const blocks = buffer.split('\n\n');
+      buffer = blocks.pop() || '';
+
+      for (const block of blocks) {
+        const lines = block.split('\n').map((l) => l.trimEnd()).filter(Boolean);
+        let eventName = 'message';
+        const dataLines: string[] = [];
+        for (const line of lines) {
+          if (line.startsWith(':')) continue;
+          if (line.startsWith('event:')) { eventName = line.slice(6).trim(); continue; }
+          if (line.startsWith('data:')) { dataLines.push(line.slice(5)); }
+        }
+        const rawData = dataLines.join('\n');
+        if (!rawData || rawData === '[DONE]') continue;
+
+        if (eventName === 'data' || eventName === 'message') {
+          const content = rawData.replace(/\\n/g, '\n');
+          if (content) {
+            fullText += content;
+            onChunk(content);
+          }
+        }
+      }
+    }
+    if (buffer.trim()) {
+      const lines = buffer.split('\n').map((l) => l.trimEnd()).filter(Boolean);
+      for (const line of lines) {
+        if (line.startsWith('data:')) {
+          const content = line.slice(5).replace(/\\n/g, '\n');
+          if (content) { fullText += content; onChunk(content); }
+        }
+      }
+    }
+    onDone(fullText);
+  } catch (e) {
     onError(e instanceof Error ? e : new Error('流式请求异常'));
   } finally {
     reader.releaseLock();
@@ -147,7 +230,7 @@ export async function getChatHistory(options?: { [key: string]: any }) {
 
 /** 搜索用户接口 /api/user/search */
 export async function searchUsers(params?: { username?: string }) {
-  return request<API.BaseResponse<API.CurrentUser[]>>('/api/user/search', {
+  return request<API.CurrentUser[]>('/api/user/search', {
     method: 'GET',
     params: params || {},
   });
@@ -290,17 +373,19 @@ export async function toggleFavorite(exerciseId: number) {
 }
 
 /** 获取收藏列表 GET /api/user/favorite/list */
-export async function getFavoriteList() {
+export async function getFavoriteList(options?: { [key: string]: any }) {
   return request<API.Exercise[]>('/api/user/favorite/list', {
     method: 'GET',
+    ...(options || {}),
   });
 }
 
 /** 保存计划按钮*/
-export async function savePlan(data: { type: 'training' | 'diet' }) {
+export async function savePlan(data: { type: 'training' | 'diet'; content?: string }, options?: { [key: string]: any }) {
   return request<string>('/api/chat/save-plan', {
     method: 'POST',
     data,
+    ...(options || {}),
   });
 }
 
@@ -312,9 +397,10 @@ export async function quickSaveRecord(data: { type: 'training' | 'diet' }) {
 }
 
 /** 获取可用模型列表 */
-export async function getModelList() {
+export async function getModelList(options?: { [key: string]: any }) {
   return request<{ models: { name: string; label: string }[]; current: string }>('/api/model/list', {
     method: 'GET',
+    ...(options || {}),
   });
 }
 
@@ -324,6 +410,67 @@ export async function switchModel(name: string) {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     data: { name },
+  });
+}
+
+/** 获取模型角色配置 */
+export async function getModelConfig(options?: { [key: string]: any }) {
+  return request<{ purificationModel: string; chatModel: string; defaultModel: string; whisperModel: string; visionModel: string }>('/api/model/config', {
+    method: 'GET',
+    ...(options || {}),
+  });
+}
+
+/** 更新模型角色配置 */
+export async function updateModelConfig(data: { purificationModel?: string; chatModel?: string; whisperModel?: string; visionModel?: string }) {
+  return request<string>('/api/model/config', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    data,
+  });
+}
+
+/** 全量保存模型角色配置（一次性提交所有角色） */
+export async function saveAllModelConfig(data: { purificationModel?: string; chatModel?: string; whisperModel?: string; visionModel?: string }) {
+  return request<string>('/api/model/config/saveAll', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    data,
+  });
+}
+
+/** 添加自定义模型 */
+export async function addCustomModel(data: { name: string; label: string; baseUrl: string; apiKey: string; model: string; type: string }) {
+  return request<string>('/api/model/custom', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    data,
+  });
+}
+
+/** 获取自定义模型详情（编辑回填） */
+export async function getCustomModelDetail(name: string) {
+  return request<{ name: string; label: string; baseUrl: string; apiKey: string; model: string; type: string }>('/api/model/custom/detail', {
+    method: 'GET',
+    params: { name },
+  });
+}
+
+/** 删除自定义模型 */
+export async function deleteCustomModel(name: string) {
+  return request<string>('/api/model/custom', {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    data: { name },
+  });
+}
+
+/** 更新自定义模型 */
+export async function updateCustomModel(data: { name: string; label?: string; baseUrl?: string; apiKey?: string; model?: string; type?: string }) {
+  return request<string>('/api/model/custom', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    data,
   });
 }
 
@@ -643,6 +790,64 @@ export async function deleteTrainingCycle(cycleId: number, options?: { [key: str
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     data: cycleId,
+    ...(options || {}),
+  });
+}
+
+// ========== 拍照识别食物 ==========
+
+export async function recognizeFoodImage(
+  body: FormData,
+  options?: { [key: string]: any },
+) {
+  const timeout = (options && options.timeout) || 60000;
+  return request('/api/chat/recognize-food', {
+    method: 'POST',
+    data: body,
+    timeout,
+    requestType: 'form',
+    ...(options || {}),
+  });
+}
+
+// ========== 获取图片识别配置 ==========
+
+export async function getRecognizeConfig() {
+  return request('/api/chat/recognize-config', { method: 'GET' });
+}
+
+export async function saveRecognizedFood(
+  data: {
+    imageUrl: string;
+    foodName: string;
+    unit: string;
+    actualAmount: number;
+    perUnitAmount: number;
+    calories: number;
+    protein: number;
+    carbs: number;
+    fat: number;
+    fiber: number;
+    mealType: string;
+    source: string;
+  },
+  options?: { [key: string]: any },
+) {
+  return request<boolean>('/api/chat/recognize-food/save', {
+    method: 'POST',
+    data,
+    ...(options || {}),
+  });
+}
+
+/** 语音转录 (Groq Whisper) POST /api/chat/transcribe-audio */
+export async function transcribeAudio(
+  body: FormData,
+  options?: { [key: string]: any },
+) {
+  return request<string>('/api/chat/transcribe-audio', {
+    method: 'POST',
+    data: body,
     ...(options || {}),
   });
 }

@@ -5,7 +5,9 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.zz.usercenter.exception.BusincessException;
 import com.zz.usercenter.mapper.UserMapper;
 import com.zz.usercenter.model.domain.User;
+import com.zz.usercenter.model.domain.UserProfile;
 import com.zz.usercenter.service.UserService;
+import com.zz.usercenter.service.UserProfileService;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
@@ -36,6 +38,9 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
     //注入Mapper 让代码一眼就能看出是业务逻辑最终是靠哪个数据访问对象完成的
     @Resource
     private UserMapper userMapper;
+
+    @Resource
+    private UserProfileService userProfileService;
 
     /**
      * 盐值，混淆密码
@@ -139,8 +144,8 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         // 3.用户脱敏 -- 避免返回敏感信息
         User safetyUser = getSafetyUser(user);
 
-        // 4.记录用户的登录态
-        request.getSession().setAttribute(USER_LOGIN_STATE, user);
+        // 4.记录用户的登录态（存脱敏对象，避免密码哈希暴露在Session中）
+        request.getSession().setAttribute(USER_LOGIN_STATE, safetyUser);
 
         return safetyUser;
     }
@@ -166,19 +171,32 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         safetyUser.setAge(originUser.getAge());
         safetyUser.setHeight(originUser.getHeight());
         safetyUser.setWeight(originUser.getWeight());
-        safetyUser.setActivityLevel(originUser.getActivityLevel());
-        safetyUser.setActivityFactor(originUser.getActivityFactor());
-        safetyUser.setDailyCalorieBurn(originUser.getDailyCalorieBurn());
-        safetyUser.setCustomDailyCalories(originUser.getCustomDailyCalories());
-        safetyUser.setTargetWeight(originUser.getTargetWeight());
         safetyUser.setFavoritesExercises(originUser.getFavoritesExercises());
-        safetyUser.setFitnessGoal(originUser.getFitnessGoal());
-        safetyUser.setUserProfile(originUser.getUserProfile());
         safetyUser.setModelPreference(originUser.getModelPreference());
-        safetyUser.setExperienceLevel(originUser.getExperienceLevel());
-        safetyUser.setPreferredEquipment(originUser.getPreferredEquipment());
         safetyUser.setUserStatus(originUser.getUserStatus());
         safetyUser.setCreateTime(originUser.getCreateTime());
+        safetyUser.setCity(originUser.getCity());
+        safetyUser.setCityEn(originUser.getCityEn());
+        UserProfile p = userProfileService.getByUserId(originUser.getId());
+        if (p != null) {
+            safetyUser.setFitnessGoal(p.getFitnessGoal());
+            safetyUser.setActivityLevel(p.getActivityLevel());
+            safetyUser.setActivityFactor(p.getActivityFactor());
+            safetyUser.setDailyCalorieBurn(p.getDailyCalorieBurn());
+            safetyUser.setCustomDailyCalories(p.getCustomDailyCalories());
+            safetyUser.setTargetWeight(p.getTargetWeight());
+            safetyUser.setExperienceLevel(p.getExperienceLevel());
+            safetyUser.setPreferredEquipment(p.getPreferredEquipment());
+            safetyUser.setWeeklyTrainingDays(p.getWeeklyTrainingDays());
+            safetyUser.setTrainingDuration(p.getTrainingDuration());
+            safetyUser.setOccupation(p.getOccupation());
+            safetyUser.setPersonality(p.getPersonality());
+            safetyUser.setMedicalHistory(p.getMedicalHistory());
+            safetyUser.setDietPreference(p.getDietPreference());
+            safetyUser.setTrainingPreference(p.getTrainingPreference());
+            safetyUser.setUserProfile(p.getUserProfileText());
+        }
+
         return safetyUser;
     }
 

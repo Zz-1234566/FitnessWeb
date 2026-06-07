@@ -7,6 +7,7 @@ create table zz.user_record
     yesterdaySummary text                               null comment '昨日AI总结',
     weeklyReviews    text                               null comment '每日复盘数组JSON',
     weeklySummary    text                               null comment '周度AI总结',
+    eveningReminder  text                               null comment '晚间主动提醒内容（AI生成）',
     createTime       datetime default CURRENT_TIMESTAMP null comment '创建时间',
     updateTime       datetime default CURRENT_TIMESTAMP null on update CURRENT_TIMESTAMP comment '更新时间'
 );

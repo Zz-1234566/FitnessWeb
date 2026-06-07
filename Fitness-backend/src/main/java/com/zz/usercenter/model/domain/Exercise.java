@@ -45,6 +45,9 @@ public class Exercise implements Serializable {
     /** 组间休息时间（秒） */
     private Integer restSeconds;
 
+    /** MET代谢当量 */
+    private Double metValue;
+
     /** 视频URL */
     private String videoUrl;
 

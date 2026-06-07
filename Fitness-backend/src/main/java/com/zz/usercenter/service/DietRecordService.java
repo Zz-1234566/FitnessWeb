@@ -56,4 +56,9 @@ public interface DietRecordService {
     String getLegacyRecordJson(Long userId, LocalDate recordDate);
 
     boolean hasRecord(Long userId, LocalDate recordDate);
+
+    /**
+     * 获取指定日期的宏量营养素汇总
+     */
+    Map<String, Object> getDayMacroSummary(Long userId, LocalDate recordDate);
 }

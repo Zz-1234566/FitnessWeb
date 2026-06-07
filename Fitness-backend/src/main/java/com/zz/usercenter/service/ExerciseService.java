@@ -26,4 +26,7 @@ public interface ExerciseService extends IService<Exercise> {
 
     /** 按用户画像过滤后，按肌群均匀采样最多 limit 个训练动作 */
     List<Exercise> sampleByFilters(String preferredEquipment, String experienceLevel, int limit);
+
+    /** 根据器械名称模糊匹配动作（用于视觉识别器械后推荐动作） */
+    List<Exercise> searchByEquipment(String equipmentName);
 }

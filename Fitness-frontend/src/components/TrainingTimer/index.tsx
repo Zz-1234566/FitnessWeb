@@ -7,7 +7,7 @@ import {
 } from '@ant-design/icons';
 import { Button, message } from 'antd';
 import React, { useEffect, useMemo, useState } from 'react';
-import { MUSCLE_GROUP_LABELS } from '@/constants/exercise';
+import { MUSCLE_GROUP_LABELS, parseEquipment } from '@/constants/exercise';
 import useBottomSheetGesture from '@/hooks/useBottomSheetGesture';
 import { addExerciseRecord, getTodayExerciseRecords } from '@/services/ant-design-pro/api';
 import './index.less';
@@ -325,7 +325,7 @@ const TrainingTimer: React.FC<TrainingTimerProps> = ({ open, exercise, onClose }
           <div className="training-timer-head">
             <strong>{exercise.name}</strong>
             <span>
-              {[displayMuscleLabel, exercise.equipment, draft.totalSets && draft.recommendedReps ? `推荐 ${draft.totalSets}×${draft.recommendedReps}` : null]
+              {[displayMuscleLabel, parseEquipment(exercise.equipment || '').join(' · ') || exercise.equipment, draft.totalSets && draft.recommendedReps ? `推荐 ${draft.totalSets}×${draft.recommendedReps}` : null]
                 .filter(Boolean)
                 .join(' · ')}
             </span>
@@ -474,7 +474,7 @@ const TrainingTimer: React.FC<TrainingTimerProps> = ({ open, exercise, onClose }
               <CheckCircleFilled />
             </div>
             <h3>{exercise.name} 训练完成</h3>
-          <p>{[displayMuscleLabel, exercise.equipment, exercise.difficulty].filter(Boolean).join(' · ')}</p>
+          <p>{[displayMuscleLabel, parseEquipment(exercise.equipment || '').join(' · ') || exercise.equipment, exercise.difficulty].filter(Boolean).join(' · ')}</p>
 
             <div className="training-timer-confirm-stats">
               <div>

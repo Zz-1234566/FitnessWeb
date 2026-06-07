@@ -41,6 +41,7 @@ export async function getInitialState(): Promise<{
   currentUser?: API.CurrentUser;
   loading?: boolean;
   fetchUserInfo?: () => Promise<API.CurrentUser | undefined>;
+  summaryNotice?: API.SummaryNotification | null;
 }> {
   const fetchUserInfo = async () => {
     try {
@@ -118,7 +119,7 @@ export const layout: RunTimeLayoutConfig = ({ initialState }) => {
  */
 export const request: RequestConfig = {
   ...errorConfig,
-  timeout: 1000000,
+  timeout: 30000,
   // 响应拦截器：提取数据，失败时抛错（不弹窗）
   responseInterceptors: [
     (response) => {
@@ -135,11 +136,7 @@ export const request: RequestConfig = {
   // 错误处理器：通过 opts.skipErrorHandler 控制是否弹窗
   errorConfig: {
     errorHandler: (error: any, opts: any) => {
-      const pathname = history.location?.pathname || '/';
-      const shouldSuppressAuthToast =
-        !isPublicRoute(pathname) && isAuthErrorMessage(error?.message);
-
-      if (!opts?.skipErrorHandler && !shouldSuppressAuthToast) {
+      if (!opts?.skipErrorHandler && !isAuthErrorMessage(error?.message)) {
         message.error(error.message);
       }
       throw error;

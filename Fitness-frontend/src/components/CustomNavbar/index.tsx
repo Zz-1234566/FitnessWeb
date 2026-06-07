@@ -5,13 +5,12 @@ import {
   BellOutlined,
   DeleteOutlined,
   DownOutlined,
-  FireOutlined,
   HomeOutlined,
   LockOutlined,
   LogoutOutlined,
-  MessageOutlined,
   MoonOutlined,
   SettingOutlined,
+  ShopOutlined,
   StarOutlined,
   SunOutlined,
   UserOutlined,
@@ -27,17 +26,21 @@ import { useSitePreferences } from '@/contexts/SitePreferenceContext';
 import './index.less';
 const NAV_ITEMS = [
   { path: '/welcome', label: '首页', icon: <HomeOutlined /> },
-  { path: '/exercises', label: '动作库', icon: <FireOutlined /> },
-  { path: '/user/chat', label: 'AI 教练', icon: <MessageOutlined /> },
+  { path: '/muscles', label: '肌肉导航', icon: <img className="nav-svg-icon" src="/icons/nav.svg" alt="" /> },
+  { path: '/exercises', label: '动作库', icon: <img className="nav-svg-icon" src="/icons/exercises.svg" alt="" /> },
+  { path: '/user/chat', label: 'AI聊天', icon: <img className="nav-svg-icon" src="/icons/chat.svg" alt="" /> },
 ];
 
 const noticeToastKey = (id: string) => `summary_notice_toast_${id}`;
 
-const getNextEightAM = () => {
-  const next = new Date();
-  next.setHours(8, 0, 0, 0);
-  if (next.getTime() <= Date.now()) {
-    next.setDate(next.getDate() + 1);
+const getNextHalfHour = () => {
+  const now = new Date();
+  const minutes = now.getMinutes();
+  const next = new Date(now);
+  if (minutes < 30) {
+    next.setMinutes(30, 0, 0);
+  } else {
+    next.setHours(next.getHours() + 1, 0, 0, 0);
   }
   return next;
 };
@@ -158,6 +161,7 @@ const CustomNavbar: React.FC = () => {
     try {
       const notice = await getSummaryNotification({ skipErrorHandler: true });
       setSummaryNotice(notice);
+      setInitialState((state) => ({ ...state, summaryNotice: notice || undefined }));
 
       if (!notice || !notice.cards?.length || !notice.hasUnread) {
         return;
@@ -242,7 +246,7 @@ const CustomNavbar: React.FC = () => {
         if (cancelled) return;
         await syncSummaryNotice(true);
         scheduleNextRefresh();
-      }, Math.max(1000, getNextEightAM().getTime() - Date.now()));
+      }, Math.max(1000, getNextHalfHour().getTime() - Date.now()));
     };
 
     void syncSummaryNotice(false);
@@ -449,13 +453,21 @@ const CustomNavbar: React.FC = () => {
           {access.canAdmin && (
             <button
               className="navAdmin"
-              onClick={() => history.push('/admin/food-manage')}
+              onClick={() => history.push('/admin/user-manage')}
               aria-label="管理"
-              title="管理"
+              title="用户管理"
             >
               <SettingOutlined />
             </button>
           )}
+          <button
+            className="navAdmin"
+            onClick={() => history.push('/user/food-manage')}
+            aria-label="食物管理"
+            title="食物管理"
+          >
+            <ShopOutlined />
+          </button>
 
           {currentUser ? (
             <>
@@ -611,7 +623,7 @@ const CustomNavbar: React.FC = () => {
                 ) : (
                   <div className="noticeEmpty">
                     <div className="noticeTitle">暂无通知</div>
-                    <div className="noticeHint">每天 08:00 更新</div>
+                    <div className="noticeHint">07:50 早间提醒 · 19:50 晚间提醒</div>
                   </div>
                 )}
               </div>

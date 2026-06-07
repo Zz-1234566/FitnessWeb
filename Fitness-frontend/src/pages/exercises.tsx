@@ -1,18 +1,18 @@
-import { CalendarOutlined, FireOutlined, HeartFilled, HeartOutlined, PlusOutlined, ReadOutlined, ReloadOutlined, RightOutlined, UploadOutlined } from '@ant-design/icons';
+import { CalendarOutlined, CameraOutlined, FireOutlined, HeartFilled, HeartOutlined, PlusOutlined, ReadOutlined, ReloadOutlined, RightOutlined, SettingOutlined, UploadOutlined } from '@ant-design/icons';
 import { useModel, useSearchParams, history } from '@umijs/max';
-import { AutoComplete, Button, Input, InputNumber, Modal, Select, Spin, Upload, message } from 'antd';
+import { AutoComplete, Button, Checkbox, Input, InputNumber, Modal, Select, Spin, Upload, message } from 'antd';
 import Model, { type IExerciseData, type Muscle } from 'react-body-highlighter';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ExerciseCard from '@/components/ExerciseCard';
 import ExerciseExplorerFilters, { type ExerciseExplorerFilterRow } from '@/components/ExerciseExplorerFilters';
 import TrainingTimer from '@/components/TrainingTimer';
-import TypewriterGreeting, { buildGreetingMessages } from '@/components/TypewriterGreeting';
 import {
   MUSCLE_GROUP_COLORS,
   MUSCLE_GROUP_FILTERS,
   MUSCLE_GROUP_LABELS,
   DIFFICULTY_OPTIONS,
   getEquipmentOptions,
+  parseEquipment,
   type MuscleGroup,
 } from '@/constants/exercise';
 import useEnsureCurrentUser from '@/hooks/useEnsureCurrentUser';
@@ -30,6 +30,7 @@ import {
   getActiveTrainingCycle,
   addStructuredExerciseRecord,
   getExerciseList,
+  getTodayDietRecords,
   getExercisesByGroup,
   listDietCycles,
   listDietDayTemplates,
@@ -37,6 +38,7 @@ import {
   listMyFoods,
   listTrainingCycles,
   listTrainingTemplates,
+  recognizeFoodImage,
   saveDietCycle,
   saveDietDayTemplate,
   saveDietTemplate,
@@ -89,10 +91,28 @@ const kjToKcal = (value?: number) => (value || 0) / 4.184;
 const formatFoodBase = (baseAmount?: number, unit?: string) => `${baseAmount || 100} ${unit || 'g'}`;
 const getRequestErrorMessage = (error: any, fallback: string) =>
   error?.info?.message || error?.data?.message || error?.message || fallback;
+const RECENT_DIET_FOODS_STORAGE_KEY = 'recent_diet_foods';
 
 type SelectedFoodItem = {
   food: API.FoodItem;
   amount: number;
+};
+
+type DietHistoryRecord = {
+  time?: string;
+  name?: string;
+  mealType?: string;
+  calories?: number;
+  note?: string;
+  source?: string;
+  items?: Array<{
+    foodItemId?: number;
+    foodName?: string;
+    name?: string;
+    amount?: number;
+    unit?: string;
+    imageUrl?: string;
+  }>;
 };
 
 type PlanTrainingDraft = {
@@ -250,6 +270,25 @@ const normalizeExerciseMuscleGroup = (value?: string): MuscleGroup | '' => {
   }
 };
 
+const generateNextName = (
+  existingNames: string[],
+  prefix: string,
+  aiPrefix = '',
+): string => {
+  const numSet = new Set<number>();
+  existingNames.forEach((n) => {
+    const fullPrefix = aiPrefix ? `${aiPrefix}${prefix}` : prefix;
+    if (n.startsWith(fullPrefix)) {
+      const tail = n.slice(fullPrefix.length);
+      const num = parseInt(tail, 10);
+      if (num > 0 && String(num) === tail) numSet.add(num);
+    }
+  });
+  let next = 1;
+  while (numSet.has(next)) next++;
+  return `${aiPrefix}${prefix}${next}`;
+};
+
 /* ===== 肌肉映射 ===== */
 const muscleToGroupId: Record<string, string> = {
   'chest': 'chest', 'upper-back': 'back', 'lower-back': 'back', 'trapezius': 'back',
@@ -292,27 +331,14 @@ const EXERCISE_GREET_LINES = [
   '从这里开始挑动作，今天的训练就算正式开场了。',
 ];
 
-const buildExerciseGreetingVariants = (greeting: string, username?: string) => {
-  const name = username?.trim() || '朋友';
-  return [
-    `${greeting}，${name}`,
-    `${name}，今天先练哪一块`,
-    `${greeting}，从这里开始今天的训练`,
-  ];
-};
-
 const Exercises: React.FC = () => {
   useEnsureCurrentUser();
   const { initialState } = useModel('@@initialState');
   const currentUser = initialState?.currentUser;
-  const heroMessages = useMemo(
-    () =>
-      buildGreetingMessages(
-        buildExerciseGreetingVariants(getGreeting(), currentUser?.username),
-        EXERCISE_GREET_LINES,
-      ),
-    [currentUser?.username],
-  );
+  const staticHeroMessage = useMemo(() => ({
+    title: `${getGreeting()}，${currentUser?.username?.trim() || '朋友'}`,
+    sub: EXERCISE_GREET_LINES[0],
+  }), [currentUser?.username]);
   const { favoriteIds, videoUrl, setVideoUrl, handleToggleFavorite } = useExerciseInteractions();
   const [selectedGroup, setSelectedGroup] = useState<MuscleGroup>('all');
   const [selectedDifficulty, setSelectedDifficulty] = useState('all');
@@ -343,8 +369,8 @@ const Exercises: React.FC = () => {
   const [planEditorSaving, setPlanEditorSaving] = useState(false);
   const [dietPanelShowAllMeals, setDietPanelShowAllMeals] = useState(false);
   const [dietPanelMealType, setDietPanelMealType] = useState<MealType>(getMealByTime());
-  const [viewingPlanDayIndex, setViewingPlanDayIndex] = useState<number | null>(null);
-  const [showDayPicker, setShowDayPicker] = useState(false);
+  const [trainingPanelShowAllDays, setTrainingPanelShowAllDays] = useState(false);
+  const [trainingPanelDayIndex, setTrainingPanelDayIndex] = useState<number>(1);
   const [planEditorMode, setPlanEditorMode] = useState<'training' | 'diet'>('training');
   const [planDraft, setPlanDraft] = useState<PlanDraftState>(createDefaultPlanDraft);
   const [planScheduleDraft, setPlanScheduleDraft] = useState<PlanScheduleDraft>(createDefaultPlanScheduleDraft);
@@ -361,19 +387,116 @@ const Exercises: React.FC = () => {
     name: '',
     mealConfig: {},
   });
+  const [managerOpen, setManagerOpen] = useState(false);
+  const [managerMode, setManagerMode] = useState<'training' | 'diet'>('training');
+  const [managerTab, setManagerTab] = useState('');
+  const [managerSelectedIds, setManagerSelectedIds] = useState<Set<number>>(new Set());
+  const [batchMode, setBatchMode] = useState(false);
   const [dietRecordOpen, setDietRecordOpen] = useState(false);
   const [dietRecordMealType, setDietRecordMealType] = useState<MealType>(getMealByTime());
   const [dietFoodKeyword, setDietFoodKeyword] = useState('');
   const [dietFoodOptions, setDietFoodOptions] = useState<API.FoodItem[]>([]);
   const [dietFoodLoading, setDietFoodLoading] = useState(false);
   const [dietSelectedFoods, setDietSelectedFoods] = useState<SelectedFoodItem[]>([]);
+  const [dietRecentRecords, setDietRecentRecords] = useState<DietHistoryRecord[]>([]);
+  const [dietRecentFoods, setDietRecentFoods] = useState<API.FoodItem[]>([]);
   const [myFoods, setMyFoods] = useState<API.FoodItem[]>([]);
   const [dietRecordNote, setDietRecordNote] = useState('');
   const [dietRecordSaving, setDietRecordSaving] = useState(false);
   const [foodEditorOpen, setFoodEditorOpen] = useState(false);
   const [foodEditorSaving, setFoodEditorSaving] = useState(false);
+  const [foodRecognizing, setFoodRecognizing] = useState(false);
+  const foodRecognizeFileRef = useRef<HTMLInputElement>(null);
   const [foodEditor, setFoodEditor] = useState<FoodEditorState>(createDefaultFoodEditor);
   const [returnToDietAfterFoodEditor, setReturnToDietAfterFoodEditor] = useState(false);
+
+  const todaySheet = useBottomSheetGesture(!!activePanel && isMobilePanel, () => setActivePanel(null));
+  const planEditorSheet = useBottomSheetGesture(planEditorOpen && isMobilePanel, () => setPlanEditorOpen(false));
+  const planScheduleSheet = useBottomSheetGesture(planScheduleOpen && isMobilePanel, () => setPlanScheduleOpen(false));
+  const dayTemplateSheet = useBottomSheetGesture(dayTemplateEditorOpen && isMobilePanel, () => setDayTemplateEditorOpen(false));
+  const dietRecordSheet = useBottomSheetGesture(dietRecordOpen && isMobilePanel, () => setDietRecordOpen(false));
+  const foodEditorSheet = useBottomSheetGesture(foodEditorOpen && isMobilePanel, () => {
+    setFoodEditorOpen(false);
+    if (returnToDietAfterFoodEditor) {
+      window.setTimeout(() => setDietRecordOpen(true), 180);
+      setReturnToDietAfterFoodEditor(false);
+    }
+  });
+
+  const managerSheet = useBottomSheetGesture(managerOpen && isMobilePanel, () => setManagerOpen(false));
+
+  const overlayLocked = !!activePanel
+    || planEditorOpen
+    || planScheduleOpen
+    || dayTemplateEditorOpen
+    || managerOpen
+    || (!!dietRecordOpen && !isMobilePanel)
+    || (!!foodEditorOpen && !isMobilePanel)
+    || todaySheet.mounted
+    || planEditorSheet.mounted
+    || planScheduleSheet.mounted
+    || dayTemplateSheet.mounted
+    || dietRecordSheet.mounted
+    || foodEditorSheet.mounted
+    || managerSheet.mounted;
+
+  useEffect(() => {
+    if (!overlayLocked) {
+      document.documentElement.classList.remove('app-overlay-lock');
+      document.body.classList.remove('app-overlay-lock');
+      return;
+    }
+    document.documentElement.classList.add('app-overlay-lock');
+    document.body.classList.add('app-overlay-lock');
+    return () => {
+      document.documentElement.classList.remove('app-overlay-lock');
+      document.body.classList.remove('app-overlay-lock');
+    };
+  }, [overlayLocked]);
+
+  const fetchMyFoods = async () => {
+    try {
+      const res = await listMyFoods({ skipErrorHandler: true });
+      setMyFoods(Array.isArray(res) ? res : []);
+    } catch {
+      setMyFoods([]);
+    }
+  };
+
+  const loadRecentDietFoodsFromStorage = () => {
+    if (typeof window === 'undefined') return [];
+    try {
+      const raw = window.localStorage.getItem(RECENT_DIET_FOODS_STORAGE_KEY);
+      const parsed = raw ? JSON.parse(raw) : [];
+      return Array.isArray(parsed) ? parsed as API.FoodItem[] : [];
+    } catch {
+      return [];
+    }
+  };
+
+  const persistRecentDietFoods = (foods: API.FoodItem[]) => {
+    setDietRecentFoods(foods);
+    if (typeof window === 'undefined') return;
+    try {
+      window.localStorage.setItem(RECENT_DIET_FOODS_STORAGE_KEY, JSON.stringify(foods.slice(0, 12)));
+    } catch {}
+  };
+
+  const pushRecentDietFoods = (foods: API.FoodItem[]) => {
+    if (foods.length === 0) return;
+    const nextMap = new Map<number, API.FoodItem>();
+    foods.forEach((food) => {
+      if (food?.id) nextMap.set(food.id, food);
+    });
+    dietRecentFoods.forEach((food) => {
+      if (food?.id && !nextMap.has(food.id)) nextMap.set(food.id, food);
+    });
+    persistRecentDietFoods(Array.from(nextMap.values()).slice(0, 12));
+  };
+
+  useEffect(() => {
+    persistRecentDietFoods(loadRecentDietFoodsFromStorage());
+  }, []);
 
   useEffect(() => {
     if (typeof window === 'undefined') return undefined;
@@ -393,7 +516,10 @@ const Exercises: React.FC = () => {
       return;
     }
     void fetchMyFoods();
-  }, [dietRecordOpen, fetchMyFoods]);
+    void getTodayDietRecords({ skipErrorHandler: true })
+      .then((res) => setDietRecentRecords(Array.isArray(res) ? res : []))
+      .catch(() => setDietRecentRecords([]));
+  }, [dietRecordOpen]);
 
   useEffect(() => {
     if (!dietRecordOpen) {
@@ -412,55 +538,6 @@ const Exercises: React.FC = () => {
     }, 200);
     return () => window.clearTimeout(timer);
   }, [dietFoodKeyword, dietRecordOpen]);
-
-  const todaySheet = useBottomSheetGesture(!!activePanel && isMobilePanel, () => setActivePanel(null));
-  const planEditorSheet = useBottomSheetGesture(planEditorOpen && isMobilePanel, () => setPlanEditorOpen(false));
-  const planScheduleSheet = useBottomSheetGesture(planScheduleOpen && isMobilePanel, () => setPlanScheduleOpen(false));
-  const dayTemplateSheet = useBottomSheetGesture(dayTemplateEditorOpen && isMobilePanel, () => setDayTemplateEditorOpen(false));
-  const dietRecordSheet = useBottomSheetGesture(dietRecordOpen && isMobilePanel, () => setDietRecordOpen(false));
-  const foodEditorSheet = useBottomSheetGesture(foodEditorOpen && isMobilePanel, () => {
-    setFoodEditorOpen(false);
-    if (returnToDietAfterFoodEditor) {
-      window.setTimeout(() => setDietRecordOpen(true), 180);
-      setReturnToDietAfterFoodEditor(false);
-    }
-  });
-
-  const overlayLocked = !!activePanel
-    || planEditorOpen
-    || planScheduleOpen
-    || dayTemplateEditorOpen
-    || (!!dietRecordOpen && !isMobilePanel)
-    || (!!foodEditorOpen && !isMobilePanel)
-    || todaySheet.mounted
-    || planEditorSheet.mounted
-    || planScheduleSheet.mounted
-    || dayTemplateSheet.mounted
-    || dietRecordSheet.mounted
-    || foodEditorSheet.mounted;
-
-  useEffect(() => {
-    if (!overlayLocked) {
-      document.documentElement.classList.remove('app-overlay-lock');
-      document.body.classList.remove('app-overlay-lock');
-      return;
-    }
-    document.documentElement.classList.add('app-overlay-lock');
-    document.body.classList.add('app-overlay-lock');
-    return () => {
-      document.documentElement.classList.remove('app-overlay-lock');
-      document.body.classList.remove('app-overlay-lock');
-    };
-  }, [overlayLocked]);
-
-  const fetchMyFoods = useCallback(async () => {
-    try {
-      const res = await listMyFoods({ skipErrorHandler: true });
-      setMyFoods(Array.isArray(res) ? res : []);
-    } catch {
-      setMyFoods([]);
-    }
-  }, []);
 
   const fetchPlanData = useCallback(async () => {
     setPlanLoading(true);
@@ -495,7 +572,13 @@ const Exercises: React.FC = () => {
         setExercises(res || []);
       } else {
         const res = await getExerciseList();
-        setExercises(res || []);
+        const list = res || [];
+        setExercises(list);
+        setAllExercises(list);
+        if (list.length > 0) {
+          const saved = localStorage.getItem('wc_rec_idx');
+          if (saved === null) setRecIdx(seededIndex(daySeed(), list.length));
+        }
       }
     } catch {
       setExercises([]);
@@ -507,15 +590,24 @@ const Exercises: React.FC = () => {
   useEffect(() => {
     const group = searchParams.get('group') as MuscleGroup | null;
     const keyword = searchParams.get('keyword') || '';
+    const equipment = searchParams.get('equipment') || '';
     const panel = searchParams.get('panel');
     setSearchText(keyword);
 
     if (group && MUSCLE_GROUP_FILTERS.some((item) => item.key === group)) {
       setSelectedGroup(group);
       fetchExercises(group);
+      getExerciseList().then((res: any) => {
+        const list: API.Exercise[] = res?.data || res || [];
+        if (Array.isArray(list) && list.length > 0) setAllExercises(list);
+      }).catch(() => {});
     } else {
       setSelectedGroup('all');
       fetchExercises('all');
+    }
+
+    if (equipment) {
+      setSelectedEquipment(equipment);
     }
 
     if (panel === 'training' || panel === 'diet') {
@@ -525,24 +617,15 @@ const Exercises: React.FC = () => {
 
   useEffect(() => {
     void fetchPlanData();
-  }, [fetchPlanData]);
-
-  useEffect(() => {
-    getExerciseList().then((res: any) => {
-      const list: API.Exercise[] = res?.data || res || [];
-      if (Array.isArray(list) && list.length > 0) {
-        setAllExercises(list);
-        const saved = localStorage.getItem('wc_rec_idx');
-        setRecIdx(saved !== null ? +saved % list.length : seededIndex(daySeed(), list.length));
-      }
-    }).catch(() => {});
   }, []);
 
   useEffect(() => {
-    searchFoods(undefined, { skipErrorHandler: true })
-      .then((res) => setPlanFoodLibrary(Array.isArray(res) ? res : []))
-      .catch(() => setPlanFoodLibrary([]));
-  }, []);
+    if (planEditorOpen && planEditorMode === 'diet' && !planFoodLibrary.length) {
+      searchFoods(undefined, { skipErrorHandler: true })
+        .then((res) => setPlanFoodLibrary(Array.isArray(res) ? res : []))
+        .catch(() => setPlanFoodLibrary([]));
+    }
+  }, [planEditorOpen, planEditorMode, planFoodLibrary.length]);
 
   useEffect(() => {
     const keyword = planFoodKeyword.trim();
@@ -623,7 +706,7 @@ const Exercises: React.FC = () => {
       result = result.filter((item) => normalizeExerciseDifficulty(item.difficulty) === selectedDifficulty);
     }
     if (selectedEquipment !== 'all') {
-      result = result.filter((item) => item.equipment === selectedEquipment);
+      result = result.filter((item) => parseEquipment(item.equipment || '').includes(selectedEquipment));
     }
     if (searchText.trim()) {
       const keyword = searchText.trim().toLowerCase();
@@ -647,25 +730,23 @@ const Exercises: React.FC = () => {
   const hasMoreExercises = visibleCount < displayedExercises.length;
   const currentMeal = useMemo(() => getMealByTime(), []);
   const todayPlanIndex = todayPlan?.todayIndex || 1;
-  const activePlanDayIndex = viewingPlanDayIndex ?? todayPlanIndex;
-  const todayTrainingItems = useMemo(() => {
-    if (!todayPlan?.days?.length || !trainingTemplates.length) return [];
-    const todayDay = todayPlan.days.find((d) => d.dayIndex === activePlanDayIndex);
-    if (!todayDay?.templateId) return [];
-    const tpl = trainingTemplates.find((t) => t.id === todayDay.templateId);
-    if (!tpl?.items?.length) return [];
-    return tpl.items.map((item) => ({
-      ...item,
-      sectionType: item.sectionType || 'main',
-    }));
-  }, [todayPlan?.days, activePlanDayIndex, trainingTemplates]);
-  const todayTrainingTemplateName = useMemo(() => {
-    if (!todayPlan?.days?.length) return null;
-    const todayDay = todayPlan.days.find((d) => d.dayIndex === activePlanDayIndex);
-    if (!todayDay?.templateId) return null;
-    const tpl = trainingTemplates.find((t) => t.id === todayDay.templateId);
-    return tpl?.name || null;
-  }, [todayPlan?.days, activePlanDayIndex, trainingTemplates]);
+  const activePlanDayIndex = trainingPanelShowAllDays ? trainingPanelDayIndex : todayPlanIndex;
+  const allTrainingItemsByDay = useMemo(() => {
+    const map: Record<number, { items: any[]; templateName: string | null }> = {};
+    if (!todayPlan?.days?.length || !trainingTemplates.length) return map;
+    for (const day of todayPlan.days) {
+      if (!day.templateId) { map[day.dayIndex] = { items: [], templateName: null }; continue; }
+      const tpl = trainingTemplates.find((t) => t.id === day.templateId);
+      map[day.dayIndex] = {
+        items: tpl?.items?.length ? tpl.items.map((item: any) => ({ ...item, sectionType: item.sectionType || 'main' })) : [],
+        templateName: tpl?.name || null,
+      };
+    }
+    return map;
+  }, [todayPlan?.days, trainingTemplates]);
+  const activeTrainingData = allTrainingItemsByDay[activePlanDayIndex] || { items: [], templateName: null };
+  const todayTrainingItems = activeTrainingData.items;
+  const todayTrainingTemplateName = activeTrainingData.templateName;
   const todayTrainingSections = useMemo(() => {
     const grouped: Record<string, any[]> = { warmup: [], main: [], stretch: [] };
     todayTrainingItems.forEach((item) => {
@@ -728,6 +809,14 @@ const Exercises: React.FC = () => {
     () => todayDietMeals.filter((item) => item.mealType === activeDietMealType),
     [activeDietMealType, todayDietMeals],
   );
+  const latestDietRecord = useMemo(
+    () => (dietRecentRecords.length > 0 ? dietRecentRecords[dietRecentRecords.length - 1] : null),
+    [dietRecentRecords],
+  );
+  const quickRecentFoods = useMemo(() => {
+    const selectedIds = new Set(dietSelectedFoods.map((item) => item.food.id));
+    return dietRecentFoods.filter((food) => !selectedIds.has(food.id)).slice(0, 6);
+  }, [dietRecentFoods, dietSelectedFoods]);
   useEffect(() => {
     if (activePanel !== 'diet') {
       setDietPanelShowAllMeals(false);
@@ -736,6 +825,14 @@ const Exercises: React.FC = () => {
     }
     setDietPanelMealType(currentMeal);
   }, [activePanel, currentMeal]);
+  useEffect(() => {
+    if (activePanel !== 'training') {
+      setTrainingPanelShowAllDays(false);
+      return;
+    }
+    if (trainingPanelShowAllDays) return;
+    setTrainingPanelDayIndex(todayPlanIndex);
+  }, [activePanel, todayPlanIndex, trainingPanelShowAllDays]);
   useEffect(() => {
     setVisibleCount(getExerciseBatchSize());
   }, [displayedExercises]);
@@ -814,14 +911,66 @@ const Exercises: React.FC = () => {
   };
 
   const renderTrainingPlanContent = () => {
+    const availableDayIndices = (todayPlan?.days || []).map((d) => d.dayIndex);
+    const startDate = todayPlan?.startDate ? new Date(todayPlan.startDate) : null;
     if (!todayTrainingItems.length) {
       if (todayTrainingTemplateName) {
-        return <div className="ex-plan-empty">今天是{todayTrainingTemplateName}，休息一下，放松肌肉</div>;
+        return (
+          <div className="ex-plan-section-list">
+            {trainingPanelShowAllDays && availableDayIndices.length > 0 ? (
+              <div className="ex-plan-meal-tabs">
+                {availableDayIndices.map((dayIdx) => {
+                  let weekdayName = `Day ${dayIdx}`;
+                  if (startDate) {
+                    const dd = new Date(startDate);
+                    dd.setDate(dd.getDate() + (dayIdx - 1));
+                    weekdayName = WEEKDAY_NAMES[dd.getDay()];
+                  }
+                  return (
+                    <button
+                      key={dayIdx}
+                      type="button"
+                      className={`ex-plan-meal-tab${dayIdx === trainingPanelDayIndex ? ' active' : ''}${dayIdx === todayPlanIndex ? ' is-current' : ''}`}
+                      onClick={() => setTrainingPanelDayIndex(dayIdx)}
+                    >
+                      {weekdayName}
+                      {dayIdx === todayPlanIndex ? <span className="ex-plan-meal-tab-badge">今天</span> : null}
+                    </button>
+                  );
+                })}
+              </div>
+            ) : null}
+            <div className="ex-plan-empty">今天是{todayTrainingTemplateName}，休息一下，放松肌肉</div>
+          </div>
+        );
       }
       return <div className="ex-plan-empty">今天还没有可用的训练安排</div>;
     }
     return (
       <div className="ex-plan-section-list">
+        {trainingPanelShowAllDays && availableDayIndices.length > 0 ? (
+          <div className="ex-plan-meal-tabs">
+            {availableDayIndices.map((dayIdx) => {
+              let weekdayName = `Day ${dayIdx}`;
+              if (startDate) {
+                const dd = new Date(startDate);
+                dd.setDate(dd.getDate() + (dayIdx - 1));
+                weekdayName = WEEKDAY_NAMES[dd.getDay()];
+              }
+              return (
+                <button
+                  key={dayIdx}
+                  type="button"
+                  className={`ex-plan-meal-tab${dayIdx === trainingPanelDayIndex ? ' active' : ''}${dayIdx === todayPlanIndex ? ' is-current' : ''}`}
+                  onClick={() => setTrainingPanelDayIndex(dayIdx)}
+                >
+                  {weekdayName}
+                  {dayIdx === todayPlanIndex ? <span className="ex-plan-meal-tab-badge">今天</span> : null}
+                </button>
+              );
+            })}
+          </div>
+        ) : null}
         {PLAN_SECTION_OPTIONS
           .filter((option) => (todayTrainingSections[option.value] || []).length > 0)
           .map((option) => (
@@ -913,6 +1062,11 @@ const Exercises: React.FC = () => {
   const handleSavePlanDraft = async () => {
     if (!planDraft.name.trim()) {
       message.warning('请先填写计划名称');
+      return;
+    }
+    const templates = planEditorMode === 'training' ? trainingTemplates : dietTemplates;
+    if (!checkNameUnique(planDraft.name, templates, planDraft.id)) {
+      message.warning('该名称已存在，请使用其他名称');
       return;
     }
     const nextTrainingItems = planDraft.trainingItems
@@ -1058,7 +1212,16 @@ const Exercises: React.FC = () => {
   };
 
   const handleSavePlanSchedule = async () => {
+    const name = planScheduleDraft.name.trim();
+    if (!name) {
+      message.warning('请填写循环名称');
+      return;
+    }
     if (planEditorMode === 'training') {
+      if (!checkNameUnique(name, trainingCycles, planScheduleDraft.id)) {
+        message.warning('该名称已存在，请使用其他名称');
+        return;
+      }
       const validDays = planScheduleDraft.items
         .filter((item) => item.templateId)
         .map((item) => ({
@@ -1073,7 +1236,7 @@ const Exercises: React.FC = () => {
         setPlanEditorSaving(true);
         await saveTrainingCycle({
           id: planScheduleDraft.id,
-          name: planScheduleDraft.name.trim() || `${planScheduleDraft.dayCount}天训练循环`,
+          name: planScheduleDraft.name.trim(),
           dayCount: planScheduleDraft.dayCount,
           startDate: planScheduleDraft.startDate || undefined,
           activate: true,
@@ -1088,6 +1251,10 @@ const Exercises: React.FC = () => {
         setPlanEditorSaving(false);
       }
     } else {
+      if (!checkNameUnique(name, dietCycles, planScheduleDraft.id)) {
+        message.warning('该名称已存在，请使用其他名称');
+        return;
+      }
       const validDays = planScheduleDraft.items
         .filter((item) => item.dayTemplateId)
         .map((item) => ({
@@ -1102,7 +1269,7 @@ const Exercises: React.FC = () => {
         setPlanEditorSaving(true);
         await saveDietCycle({
           id: planScheduleDraft.id,
-          name: planScheduleDraft.name.trim() || `${planScheduleDraft.dayCount}天饮食循环`,
+          name: planScheduleDraft.name.trim(),
           dayCount: planScheduleDraft.dayCount,
           startDate: planScheduleDraft.startDate || undefined,
           activate: true,
@@ -1133,7 +1300,8 @@ const Exercises: React.FC = () => {
         mealConfig,
       });
     } else {
-      setDayTemplateDraft({ name: '', mealConfig: {} });
+      const name = generateNextName(dayTemplates.map((t) => t.name), '天模板');
+      setDayTemplateDraft({ name, mealConfig: {} });
     }
     setDayTemplateEditorOpen(true);
   };
@@ -1141,6 +1309,10 @@ const Exercises: React.FC = () => {
   const handleSaveDayTemplate = async () => {
     if (!dayTemplateDraft.name.trim()) {
       message.warning('请填写天模板名称');
+      return;
+    }
+    if (!checkNameUnique(dayTemplateDraft.name, dayTemplates, dayTemplateDraft.id)) {
+      message.warning('该名称已存在，请使用其他名称');
       return;
     }
     const validEntries = Object.entries(dayTemplateDraft.mealConfig).filter(([, v]) => v > 0);
@@ -1175,6 +1347,293 @@ const Exercises: React.FC = () => {
     } catch (error: any) {
       message.error(getRequestErrorMessage(error, '删除失败'));
     }
+  };
+
+  // ===================== 名称查重 =====================
+
+  const checkNameUnique = (name: string, existingItems: { id?: number; name: string }[], currentId?: number): boolean => {
+    const trimmed = name.trim();
+    if (!trimmed) return false;
+    return !existingItems.some((item) => item.id !== currentId && item.name === trimmed);
+  };
+
+  // ===================== 模板管理面板 =====================
+
+  const openManager = (mode: 'training' | 'diet') => {
+    setManagerMode(mode);
+    setManagerTab(mode === 'training' ? 'training-tpl' : 'diet-tpl');
+    setManagerSelectedIds(new Set());
+    setManagerOpen(true);
+  };
+
+  const handleManagerEditTemplate = (mode: 'training' | 'diet', templateId?: number) => {
+    setManagerOpen(false);
+    setPlanEditorMode(mode);
+    const templates = mode === 'training' ? trainingTemplates : dietTemplates;
+    if (templateId) {
+      const selected = templates.find((t) => t.id === templateId);
+      setPlanDraft(buildPlanDraftFromTemplate(selected, mode));
+    } else {
+      const draft = createDefaultPlanDraft();
+      if (mode === 'training') {
+        const names = trainingTemplates.map((t) => t.name);
+        draft.name = generateNextName(names, '训练模板');
+      } else {
+        const mealNames = dietTemplates.filter((t) => t.mealType === draft.mealType).map((t) => t.name);
+        draft.name = generateNextName(mealNames, `${draft.mealType}饮食模板`);
+      }
+      setPlanDraft(draft);
+    }
+    setTimeout(() => setPlanEditorOpen(true), 100);
+  };
+
+  const handleManagerEditCycle = (mode: 'training' | 'diet', cycleId: number) => {
+    if (mode === 'training' && !trainingTemplates.length) { message.warning('请先创建训练模板'); return; }
+    if (mode === 'diet' && !dayTemplates.length) { message.warning('请先创建天模板'); return; }
+    setManagerOpen(false);
+    setPlanEditorMode(mode);
+    const cycles = mode === 'training' ? trainingCycles : dietCycles;
+    const cycle = cycles.find((c) => c.id === cycleId);
+    if (!cycle) return;
+    const dayCount = cycle.dayCount || 7;
+    const rawDays = cycle.days || [];
+    const items = Array.from({ length: dayCount }, (_, index) => {
+      const existing = rawDays.find((d) => d.dayIndex === index + 1);
+      return {
+        dayIndex: index + 1,
+        [mode === 'training' ? 'templateId' : 'dayTemplateId']: mode === 'training' ? (existing as any)?.templateId : (existing as any)?.dayTemplateId,
+      };
+    });
+    setPlanScheduleDraft({ id: cycle.id, name: cycle.name || '', dayCount, startDate: cycle.startDate || createDefaultPlanScheduleDraft().startDate, items });
+    setTimeout(() => setPlanScheduleOpen(true), 100);
+  };
+
+  const handleManagerNewCycle = (mode: 'training' | 'diet') => {
+    if (mode === 'training' && !trainingTemplates.length) { message.warning('请先创建训练模板'); return; }
+    if (mode === 'diet' && !dayTemplates.length) { message.warning('请先创建天模板'); return; }
+    setManagerOpen(false);
+    setPlanEditorMode(mode);
+    const draft = createDefaultPlanScheduleDraft();
+    if (mode === 'training') {
+      draft.name = generateNextName(trainingCycles.map((c) => c.name), '训练循环');
+    } else {
+      draft.name = generateNextName(dietCycles.map((c) => c.name), '饮食循环');
+    }
+    setPlanScheduleDraft(draft);
+    setTimeout(() => setPlanScheduleOpen(true), 100);
+  };
+
+  const handleManagerEditDayTemplate = (id?: number) => {
+    setManagerOpen(false);
+    const existing = id ? dayTemplates.find((t) => t.id === id) : undefined;
+    handleOpenDayTemplateEditor(existing);
+  };
+
+  const toggleManagerSelect = (id: number) => {
+    setManagerSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const handleBatchDelete = async () => {
+    if (!managerSelectedIds.size) return;
+    const ids = Array.from(managerSelectedIds);
+    try {
+      if (managerTab === 'training-tpl') {
+        await Promise.all(ids.map((id) => deleteTrainingTemplate(id)));
+      } else if (managerTab === 'diet-tpl') {
+        await Promise.all(ids.map((id) => deleteDietTemplate(id)));
+      } else if (managerTab === 'day-tpl') {
+        await Promise.all(ids.map((id) => deleteDietDayTemplate(id)));
+      } else if (managerTab === 'training-cycle') {
+        await Promise.all(ids.map((id) => deleteTrainingCycle(id)));
+      } else if (managerTab === 'diet-cycle') {
+        await Promise.all(ids.map((id) => deleteDietCycle(id)));
+      }
+      message.success(`已删除 ${ids.length} 项`);
+      setManagerSelectedIds(new Set());
+      await fetchPlanData();
+    } catch (error: any) {
+      message.error(getRequestErrorMessage(error, '部分删除失败，已刷新列表'));
+      setManagerSelectedIds(new Set());
+      await fetchPlanData();
+    }
+  };
+
+  const handleManagerTabChange = (tab: string) => {
+    setManagerTab(tab);
+    setManagerSelectedIds(new Set());
+  };
+
+  const renderManagerBody = () => {
+    const isTraining = managerMode === 'training';
+    const trainingTabClass = managerTab === 'training-tpl' ? 'ex-manager-tab--active' : '';
+    const trainingCycleClass = managerTab === 'training-cycle' ? 'ex-manager-tab--active' : '';
+    const dietTplClass = managerTab === 'diet-tpl' ? 'ex-manager-tab--active' : '';
+    const dayTplClass = managerTab === 'day-tpl' ? 'ex-manager-tab--active' : '';
+    const dietCycleClass = managerTab === 'diet-cycle' ? 'ex-manager-tab--active' : '';
+    const hasSelection = batchMode && managerSelectedIds.size > 0;
+
+    const renderCheckbox = (id: number) => batchMode ? (
+      <Checkbox
+        checked={managerSelectedIds.has(id)}
+        onChange={() => toggleManagerSelect(id)}
+        onClick={(e) => e.stopPropagation()}
+      />
+    ) : null;
+
+    let listContent: React.ReactNode = null;
+    if (managerTab === 'training-tpl') {
+      listContent = (
+        <div className="ex-manager-list">
+          {trainingTemplates.length === 0 ? <div className="ex-plan-empty">还没有训练模板</div> : trainingTemplates.map((t) => (
+            <div key={t.id} className="ex-day-template-card">
+              <div className="ex-day-template-card-head">
+                {renderCheckbox(t.id)}
+                <span className="ex-day-template-card-name">{t.name}</span>
+                <div className="ex-day-template-card-actions">
+                  <Button type="text" size="small" onClick={() => handleManagerEditTemplate('training', t.id)}>编辑</Button>
+                  <Button type="text" size="small" danger onClick={async () => {
+                    try {
+                      await deleteTrainingTemplate(t.id, { skipErrorHandler: true });
+                      message.success('已删除');
+                      await fetchPlanData();
+                    } catch { message.error('删除失败'); }
+                  }}>删除</Button>
+                </div>
+              </div>
+              <div className="ex-day-template-card-meals">
+                <span className="ex-day-template-meal-tag">{t.items.length} 个动作</span>
+              </div>
+            </div>
+          ))}
+          <Button type="dashed" size="small" icon={<PlusOutlined />} block style={{ marginTop: 12 }} onClick={() => handleManagerEditTemplate('training')}>新建训练模板</Button>
+        </div>
+      );
+    } else if (managerTab === 'training-cycle') {
+      listContent = (
+        <div className="ex-manager-list">
+          {trainingCycles.length === 0 ? <div className="ex-plan-empty">还没有训练循环</div> : trainingCycles.map((c) => (
+            <div key={c.id} className="ex-day-template-card" style={c.id === trainingSchedule?.id ? { borderColor: 'var(--primary-color)' } : undefined}>
+              <div className="ex-day-template-card-head">
+                {renderCheckbox(c.id)}
+                <span className="ex-day-template-card-name">{c.name}{c.id === trainingSchedule?.id ? <span style={{ color: 'var(--primary-color)', marginLeft: 8, fontSize: 12 }}>当前</span> : null}</span>
+                <div className="ex-day-template-card-actions">
+                  {c.id !== trainingSchedule?.id && <Button type="text" size="small" onClick={() => void handleActivateCycle('training', c.id)}>激活</Button>}
+                  <Button type="text" size="small" onClick={() => handleManagerEditCycle('training', c.id)}>编辑</Button>
+                </div>
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--text-3)' }}>{c.dayCount}天 · {c.startDate || '未设置日期'}</div>
+            </div>
+          ))}
+          <Button type="dashed" size="small" icon={<PlusOutlined />} block style={{ marginTop: 12 }} onClick={() => handleManagerNewCycle('training')}>新建训练循环</Button>
+        </div>
+      );
+    } else if (managerTab === 'diet-tpl') {
+      listContent = (
+        <div className="ex-manager-list">
+          {dietTemplates.length === 0 ? <div className="ex-plan-empty">还没有饮食模板</div> : dietTemplates.map((t) => (
+            <div key={t.id} className="ex-day-template-card">
+              <div className="ex-day-template-card-head">
+                {renderCheckbox(t.id)}
+                <span className="ex-day-template-card-name">{t.mealType || ''} · {t.name}</span>
+                <div className="ex-day-template-card-actions">
+                  <Button type="text" size="small" onClick={() => handleManagerEditTemplate('diet', t.id)}>编辑</Button>
+                  <Button type="text" size="small" danger onClick={async () => {
+                    try {
+                      await deleteDietTemplate(t.id, { skipErrorHandler: true });
+                      message.success('已删除');
+                      await fetchPlanData();
+                    } catch { message.error('删除失败'); }
+                  }}>删除</Button>
+                </div>
+              </div>
+              <div className="ex-day-template-card-meals">
+                <span className="ex-day-template-meal-tag">{t.items.length} 种食物</span>
+              </div>
+            </div>
+          ))}
+          <Button type="dashed" size="small" icon={<PlusOutlined />} block style={{ marginTop: 12 }} onClick={() => handleManagerEditTemplate('diet')}>新建饮食模板</Button>
+        </div>
+      );
+    } else if (managerTab === 'day-tpl') {
+      listContent = (
+        <div className="ex-manager-list">
+          {dayTemplates.length === 0 ? <div className="ex-plan-empty">还没有天模板</div> : dayTemplates.map((t) => (
+            <div key={t.id} className="ex-day-template-card">
+              <div className="ex-day-template-card-head">
+                {renderCheckbox(t.id)}
+                <span className="ex-day-template-card-name">{t.name}</span>
+                <div className="ex-day-template-card-actions">
+                  <Button type="text" size="small" onClick={() => handleManagerEditDayTemplate(t.id)}>编辑</Button>
+                </div>
+              </div>
+              <div className="ex-day-template-card-meals">
+                {t.mealSlots?.map((m) => (
+                  <span key={m.mealType} className="ex-day-template-meal-tag">{m.mealType} · {m.templateName || '已删除'}</span>
+                ))}
+              </div>
+            </div>
+          ))}
+          <Button type="dashed" size="small" icon={<PlusOutlined />} block style={{ marginTop: 12 }} onClick={() => handleManagerEditDayTemplate()}>新建天模板</Button>
+        </div>
+      );
+    } else if (managerTab === 'diet-cycle') {
+      listContent = (
+        <div className="ex-manager-list">
+          {dietCycles.length === 0 ? <div className="ex-plan-empty">还没有饮食循环</div> : dietCycles.map((c) => (
+            <div key={c.id} className="ex-day-template-card" style={c.id === dietSchedule?.id ? { borderColor: '#E8A838' } : undefined}>
+              <div className="ex-day-template-card-head">
+                {renderCheckbox(c.id)}
+                <span className="ex-day-template-card-name">{c.name}{c.id === dietSchedule?.id ? <span style={{ color: '#E8A838', marginLeft: 8, fontSize: 12 }}>当前</span> : null}</span>
+                <div className="ex-day-template-card-actions">
+                  {c.id !== dietSchedule?.id && <Button type="text" size="small" onClick={() => void handleActivateCycle('diet', c.id)}>激活</Button>}
+                  <Button type="text" size="small" onClick={() => handleManagerEditCycle('diet', c.id)}>编辑</Button>
+                </div>
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--text-3)' }}>{c.dayCount}天 · {c.startDate || '未设置日期'}</div>
+            </div>
+          ))}
+          <Button type="dashed" size="small" icon={<PlusOutlined />} block style={{ marginTop: 12 }} onClick={() => handleManagerNewCycle('diet')}>新建饮食循环</Button>
+        </div>
+      );
+    }
+
+    return (
+      <>
+        <div className="ex-manager-tabs">
+          {isTraining ? (
+            <>
+              <div className={`ex-manager-tab ${trainingTabClass}`} onClick={() => handleManagerTabChange('training-tpl')}>训练模板</div>
+              <div className={`ex-manager-tab ${trainingCycleClass}`} onClick={() => handleManagerTabChange('training-cycle')}>训练循环</div>
+            </>
+          ) : (
+            <>
+              <div className={`ex-manager-tab ${dietTplClass}`} onClick={() => handleManagerTabChange('diet-tpl')}>饮食模板</div>
+              <div className={`ex-manager-tab ${dayTplClass}`} onClick={() => handleManagerTabChange('day-tpl')}>天模板</div>
+              <div className={`ex-manager-tab ${dietCycleClass}`} onClick={() => handleManagerTabChange('diet-cycle')}>饮食循环</div>
+            </>
+          )}
+        </div>
+        {batchMode && (
+          <div className="ex-manager-batch-bar">
+            <span>{hasSelection ? `已选 ${managerSelectedIds.size} 项` : '点击选择要操作的项'}</span>
+            <div>
+              <Button type="text" size="small" onClick={() => { setBatchMode(false); setManagerSelectedIds(new Set()); }}>取消</Button>
+              {hasSelection && <Button type="text" size="small" danger onClick={() => void handleBatchDelete()}>删除选中</Button>}
+            </div>
+          </div>
+        )}
+        {!batchMode && (
+          <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '0 16px' }}>
+            <Button type="text" size="small" onClick={() => { setBatchMode(true); setManagerSelectedIds(new Set()); }}>管理</Button>
+          </div>
+        )}
+        {listContent}
+      </>
+    );
   };
 
   const renderDayTemplateEditor = () => (
@@ -1414,11 +1873,17 @@ const Exercises: React.FC = () => {
     if (!activePanel) return null;
 
     const isTraining = activePanel === 'training';
+    const getWeekdayForDayIndex = (dayIdx: number) => {
+      if (!todayPlan?.startDate) return `Day ${dayIdx}`;
+      const d = new Date(todayPlan.startDate);
+      d.setDate(d.getDate() + (dayIdx - 1));
+      return WEEKDAY_NAMES[d.getDay()];
+    };
     const title = isTraining
-      ? (viewingPlanDayIndex != null ? `训练计划 · Day ${viewingPlanDayIndex}` : '今日训练计划')
+      ? (trainingPanelShowAllDays ? `训练计划 · ${getWeekdayForDayIndex(trainingPanelDayIndex)}` : '今日训练计划')
       : '今日饮食计划';
     const subtitle = isTraining
-      ? `${viewingPlanDayIndex != null ? `Day ${viewingPlanDayIndex}` : `${todayFullName} · Day ${todayPlanIndex}`} · ${todayTrainingTemplateName || '暂无安排'}`
+      ? `${trainingPanelShowAllDays ? getWeekdayForDayIndex(trainingPanelDayIndex) : `${todayFullName} · Day ${todayPlanIndex}`} · ${todayTrainingTemplateName || '暂无安排'}`
       : `${todayFullName} · Day ${todayPlanIndex}${todayDietDayTemplateName ? ` · ${todayDietDayTemplateName}` : ''}${todayDietMeals.length ? ` · ${todayDietMeals.length}餐` : ''}`;
 
     if (isMobilePanel) {
@@ -1446,10 +1911,12 @@ const Exercises: React.FC = () => {
               className="ex-dialog-footer-btn"
               onClick={() => {
                 if (isTraining) {
-                  if (viewingPlanDayIndex != null) {
-                    setViewingPlanDayIndex(null);
+                  if (trainingPanelShowAllDays) {
+                    setTrainingPanelShowAllDays(false);
+                    setTrainingPanelDayIndex(todayPlanIndex);
                   } else {
-                    setShowDayPicker(true);
+                    setTrainingPanelShowAllDays(true);
+                    setTrainingPanelDayIndex(todayPlanIndex);
                   }
                   return;
                 }
@@ -1462,7 +1929,7 @@ const Exercises: React.FC = () => {
               }}
             >
               {isTraining
-                ? (viewingPlanDayIndex != null ? '返回今天' : '查看其他训练日')
+                ? (trainingPanelShowAllDays ? '今天' : '其他训练日')
                 : (dietPanelShowAllMeals ? '当前时段' : '其余餐次')}
             </Button>
             {isTraining ? (
@@ -1522,10 +1989,12 @@ const Exercises: React.FC = () => {
               className="ex-dialog-footer-btn"
               onClick={() => {
                 if (isTraining) {
-                  if (viewingPlanDayIndex != null) {
-                    setViewingPlanDayIndex(null);
+                  if (trainingPanelShowAllDays) {
+                    setTrainingPanelShowAllDays(false);
+                    setTrainingPanelDayIndex(todayPlanIndex);
                   } else {
-                    setShowDayPicker(true);
+                    setTrainingPanelShowAllDays(true);
+                    setTrainingPanelDayIndex(todayPlanIndex);
                   }
                   return;
                 }
@@ -1538,7 +2007,7 @@ const Exercises: React.FC = () => {
               }}
             >
               {isTraining
-                ? (viewingPlanDayIndex != null ? '返回今天' : '查看其他训练日')
+                ? (trainingPanelShowAllDays ? '今天' : '其他训练日')
                 : (dietPanelShowAllMeals ? '当前时段' : '其余餐次')}
             </Button>
             {isTraining ? (
@@ -1584,6 +2053,7 @@ const Exercises: React.FC = () => {
     }
     try {
       setDietRecordSaving(true);
+      const selectedFoods = dietSelectedFoods.map((item) => item.food);
       await addDietRecord({
         time: getNowTime(),
         mealType: dietRecordMealType,
@@ -1595,6 +2065,10 @@ const Exercises: React.FC = () => {
         })),
       }, { skipErrorHandler: true });
       message.success('饮食记录已保存');
+      pushRecentDietFoods(selectedFoods);
+      void getTodayDietRecords({ skipErrorHandler: true })
+        .then((res) => setDietRecentRecords(Array.isArray(res) ? res : []))
+        .catch(() => {});
       if (isMobilePanel) {
         dietRecordSheet.requestClose();
       } else {
@@ -1619,6 +2093,39 @@ const Exercises: React.FC = () => {
       }
       return [...prev, { food, amount: food.baseAmount || 100 }];
     });
+    pushRecentDietFoods([food]);
+  };
+
+  const handleApplyRecentRecord = (record: DietHistoryRecord) => {
+    const items = Array.isArray(record.items) ? record.items : [];
+    if (items.length === 0) {
+      message.warning('上一餐没有可复制的食物');
+      return;
+    }
+    const selected = items
+      .map((item) => {
+        const matchedMyFood = myFoods.find((food) => food.id === item.foodItemId);
+        const matchedRecentFood = dietRecentFoods.find((food) => food.id === item.foodItemId);
+        const matchedOption = dietFoodOptions.find((food) => food.id === item.foodItemId);
+        const food = matchedMyFood || matchedRecentFood || matchedOption;
+        if (!food || !food.id) return null;
+        return {
+          food,
+          amount: item.amount || food.baseAmount || 100,
+        };
+      })
+      .filter(Boolean) as SelectedFoodItem[];
+
+    if (selected.length === 0) {
+      message.warning('上一餐里的食物暂时无法自动带出，请先搜索或新建');
+      return;
+    }
+
+    setDietRecordMealType((record.mealType as MealType) || getMealByTime());
+    setDietSelectedFoods(selected);
+    setDietRecordNote(record.note || '');
+    pushRecentDietFoods(selected.map((item) => item.food));
+    message.success('已复制上一餐，可以直接微调后保存');
   };
 
   const handleRemoveFood = (foodId: number) => {
@@ -1666,6 +2173,39 @@ const Exercises: React.FC = () => {
       return;
     }
     setFoodEditorOpen(false);
+  };
+
+  const handleFoodRecognize = async (file: File) => {
+    setFoodRecognizing(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const r: any = await recognizeFoodImage(formData, { skipErrorHandler: true });
+      if (!r) {
+        message.error('识别失败，请重试');
+        return;
+      }
+      const nutrition = r.nutritionPerUnit || r.nutritionPer100g || {};
+      const perUnit = r.perUnitAmount || 100;
+      setFoodEditor((prev) => ({
+        ...prev,
+        id: prev.id,
+        name: r.foodName || prev.name,
+        imageUrl: r.imageUrl || prev.imageUrl,
+        unit: r.unit || prev.unit,
+        baseAmount: perUnit,
+        calories: nutrition.calories || 0,
+        protein: nutrition.protein || 0,
+        carbs: nutrition.carbs || 0,
+        fat: nutrition.fat || 0,
+        fiber: nutrition.fiber || 0,
+      }));
+      message.success('识别成功，请核对数据后保存');
+    } catch (error: any) {
+      message.error(error?.message || '识别失败');
+    } finally {
+      setFoodRecognizing(false);
+    }
   };
 
   const handleFoodEditorChange = <K extends keyof FoodEditorState>(key: K, value: FoodEditorState[K]) => {
@@ -1813,11 +2353,52 @@ const Exercises: React.FC = () => {
 
   const renderMyFoods = () => (
     <>
+      {latestDietRecord ? (
+        <div className="ex-diet-recent-card">
+          <div className="ex-diet-recent-card__head">
+            <div>
+              <div className="ex-diet-recent-card__title">复制上一餐</div>
+              <div className="ex-diet-recent-card__meta">
+                {(latestDietRecord.mealType || '最近一餐')}
+                {latestDietRecord.time ? ` · ${latestDietRecord.time}` : ''}
+              </div>
+            </div>
+            <Button type="primary" ghost onClick={() => handleApplyRecentRecord(latestDietRecord)}>
+              一键带入
+            </Button>
+          </div>
+          <div className="ex-diet-recent-card__foods">
+            {(latestDietRecord.items || []).slice(0, 4).map((item, index) => (
+              <span key={`${item.foodItemId || item.name || 'food'}-${index}`} className="ex-diet-recent-card__food">
+                {item.foodName || item.name || `食物 ${index + 1}`}
+                {item.amount ? ` ${item.amount}${item.unit || 'g'}` : ''}
+              </span>
+            ))}
+          </div>
+        </div>
+      ) : null}
+      {quickRecentFoods.length > 0 ? (
+        <>
+          <div className="ex-diet-form-label">最近常吃</div>
+          <div className="ex-diet-my-foods ex-diet-my-foods--recent">
+            {quickRecentFoods.map((food) => (
+              <button type="button" key={food.id} className="ex-diet-recent-food-chip" onClick={() => handleAddFood(food)}>
+                {food.imageUrl ? <img src={food.imageUrl} alt={food.name} className="ex-diet-food-thumb" /> : <div className="ex-diet-food-thumb ex-diet-food-thumb--placeholder">{food.name?.slice(0, 1) || '食'}</div>}
+                <span>{food.name}</span>
+              </button>
+            ))}
+          </div>
+        </>
+      ) : null}
       <div className="ex-diet-food-actions">
         <div className="ex-diet-form-label" style={{ marginBottom: 0 }}>我的食物</div>
         <div className="ex-diet-food-action-buttons">
-          <Button onClick={() => history.push('/admin/food-manage')}>
-            管理我的食物
+          <Button icon={<CameraOutlined />} onClick={() => {
+            setFoodEditor(createDefaultFoodEditor());
+            setFoodEditorOpen(true);
+            window.setTimeout(() => foodRecognizeFileRef.current?.click(), 200);
+          }}>
+            拍照识别新建
           </Button>
           <Button type="dashed" icon={<PlusOutlined />} onClick={() => openFoodEditor()}>
             新建食物
@@ -1874,16 +2455,33 @@ const Exercises: React.FC = () => {
         <div className="ex-food-editor-cover">
           {foodEditor.imageUrl ? <img src={foodEditor.imageUrl} alt={foodEditor.name || '食物图片'} /> : <div className="ex-food-editor-cover-placeholder">食物图片</div>}
         </div>
-        <Upload
-          accept="image/*"
-          showUploadList={false}
-          beforeUpload={(file) => {
-            void handleFoodImageUpload(file);
-            return false;
-          }}
-        >
-          <Button icon={<UploadOutlined />}>上传图片</Button>
-        </Upload>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <Upload
+            accept="image/*"
+            showUploadList={false}
+            beforeUpload={(file) => {
+              void handleFoodImageUpload(file);
+              return false;
+            }}
+          >
+            <Button icon={<UploadOutlined />}>上传图片</Button>
+          </Upload>
+          <Button icon={<CameraOutlined />} loading={foodRecognizing} onClick={() => foodRecognizeFileRef.current?.click()}>
+            {foodRecognizing ? '识别中...' : '拍照识别'}
+          </Button>
+          <input
+            ref={foodRecognizeFileRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            style={{ display: 'none' }}
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) void handleFoodRecognize(file);
+              e.target.value = '';
+            }}
+          />
+        </div>
       </div>
       <div className="ex-food-editor-grid">
         <div className="ex-food-editor-field ex-food-editor-field--wide">
@@ -2099,13 +2697,6 @@ const Exercises: React.FC = () => {
   return (
     <div className="ex-page-shell">
       <div className="ex-page">
-        <TypewriterGreeting
-          className="ex-hero-lite"
-          titleClassName="ex-hero-lite-title"
-          subClassName="ex-hero-lite-sub"
-          messages={heroMessages}
-        />
-
         <div className="ex-today-strip">
           <div className="ex-today-left">
             <div className="ex-today-card" onClick={() => setActivePanel('training')}>
@@ -2120,6 +2711,7 @@ const Exercises: React.FC = () => {
                       : `${trainingSchedule.name} · Day ${trainingSchedule.todayIndex || 1} · ${todayTrainingTemplateName || '未安排'}`
                     : '今天还没有可用的训练安排'}
               </div>
+              <button className="ex-card-gear" onClick={(e) => { e.stopPropagation(); openManager('training'); }} type="button" aria-label="训练模板管理"><SettingOutlined /></button>
             </div>
             <div className="ex-today-card" onClick={() => setActivePanel('diet')}>
               <div className="ex-today-card-label">今日饮食</div>
@@ -2131,20 +2723,7 @@ const Exercises: React.FC = () => {
                     ? `${dietSchedule.name} · Day ${dietSchedule.todayIndex || 1}${todayDietDayTemplateName ? ` · ${todayDietDayTemplateName}` : ''}${todayDietMealLabel ? ` · 当前${todayDietMealLabel}` : ''}`
                     : '未设置饮食循环'}
               </div>
-            </div>
-            <div className="ex-plan-entry-group">
-              <Button className="ex-plan-entry-btn" onClick={() => handleOpenPlanEditor('training')}>
-                {(trainingTemplates.length || 0) > 0 ? '管理训练模板' : '创建训练模板'}
-              </Button>
-              <Button className="ex-plan-entry-btn" onClick={() => handleOpenPlanEditor('diet')}>
-                {(dietTemplates.length || 0) > 0 ? '管理饮食模板' : '创建饮食模板'}
-              </Button>
-              <Button className="ex-plan-entry-btn" onClick={() => handleOpenPlanSchedule('training')}>
-                安排训练循环
-              </Button>
-              <Button className="ex-plan-entry-btn" onClick={() => handleOpenPlanSchedule('diet')}>
-                安排饮食循环
-              </Button>
+              <button className="ex-card-gear" onClick={(e) => { e.stopPropagation(); openManager('diet'); }} type="button" aria-label="饮食模板管理"><SettingOutlined /></button>
             </div>
           </div>
           {!hasActiveExerciseFilter && (
@@ -2283,46 +2862,40 @@ const Exercises: React.FC = () => {
 
       <TrainingTimer open={!!timerExercise} exercise={timerExercise} onClose={() => setTimerExercise(null)} />
       {(isMobilePanel ? todaySheet.mounted : !!activePanel) && renderTodayPanel()}
-      {showDayPicker && todayPlan?.days && (
-        <div className="ex-today-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) setShowDayPicker(false); }}>
+
+      {!isMobilePanel && managerOpen && (
+        <div className="ex-today-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) setManagerOpen(false); }}>
           <div className="ex-today-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="ex-today-modal-header ex-today-modal-header--training">
+            <div className="ex-today-modal-header">
               <div className="ex-today-modal-title-row">
-                <div className="ex-today-modal-title">选择训练日</div>
-                <button className="ex-today-modal-close" onClick={() => setShowDayPicker(false)} type="button">✕</button>
+                <div className="ex-today-modal-title">
+                  <span className="ex-today-modal-icon"><SettingOutlined /></span>
+                  {managerMode === 'training' ? '训练模板管理' : '饮食模板管理'}
+                </div>
+                <div className="ex-today-modal-title-actions">
+                  <button className="ex-today-modal-close" onClick={() => setManagerOpen(false)} type="button">&#10005;</button>
+                </div>
               </div>
             </div>
-            <div className="ex-today-modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {todayPlan.days.map((d) => {
-                const tpl = trainingTemplates.find((t) => t.id === d.templateId);
-                const isToday = d.dayIndex === todayPlanIndex;
-                const isViewing = d.dayIndex === viewingPlanDayIndex;
-                return (
-                  <div
-                    key={d.dayIndex}
-                    className="ex-day-picker-item"
-                    onClick={() => { setViewingPlanDayIndex(d.dayIndex === viewingPlanDayIndex ? null : d.dayIndex); setShowDayPicker(false); }}
-                    style={{
-                      padding: '10px 14px', borderRadius: 8, cursor: 'pointer',
-                      border: isViewing ? '2px solid #4caf50' : '1px solid #e8e8e8',
-                      background: isToday ? '#f0f7f0' : '#fff',
-                      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                    }}
-                  >
-                    <div>
-                      <div style={{ fontWeight: 500, fontSize: 14 }}>
-                        Day {d.dayIndex}
-                        {isToday && <span style={{ color: '#4caf50', marginLeft: 6, fontSize: 12 }}>今天</span>}
-                      </div>
-                      <div style={{ color: '#888', fontSize: 12, marginTop: 2 }}>
-                        {tpl?.name || '暂无安排'}
-                      </div>
-                    </div>
-                    {isViewing && <span style={{ color: '#4caf50', fontSize: 16 }}>✓</span>}
-                  </div>
-                );
-              })}
+            <div className="ex-today-modal-body">
+              {renderManagerBody()}
             </div>
+          </div>
+        </div>
+      )}
+      {managerSheet.mounted && (
+        <div className="ex-diet-sheet" style={managerSheet.sheetStyle}>
+          <div className="ex-diet-sheet-handle" {...managerSheet.dragHandleProps} />
+          <div className="ex-diet-sheet-head" {...managerSheet.dragHandleProps}>
+            <div className="ex-diet-sheet-title-row">
+              <div className="ex-diet-sheet-title">{managerMode === 'training' ? '训练模板管理' : '饮食模板管理'}</div>
+            </div>
+            <div className="ex-diet-sheet-subtitle">
+              {managerMode === 'training' ? '管理训练模板和训练循环' : '管理饮食模板、天模板和饮食循环'}
+            </div>
+          </div>
+          <div className="ex-diet-sheet-body">
+            {renderManagerBody()}
           </div>
         </div>
       )}

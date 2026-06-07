@@ -9,10 +9,15 @@ import com.zz.usercenter.mapper.ChatHistoryMapper;
 import com.zz.usercenter.model.domain.ChatHistory;
 import com.zz.usercenter.model.domain.User;
 import com.zz.usercenter.model.domain.UserDailyMetric;
+import com.zz.usercenter.model.domain.UserProfile;
 import com.zz.usercenter.model.domain.UserRecord;
 import com.zz.usercenter.model.domain.UserWeightRecord;
+import com.zz.usercenter.model.domain.vo.UserDietCycleVO;
+import com.zz.usercenter.model.domain.vo.UserDietDayTemplateVO;
+import com.zz.usercenter.model.domain.vo.UserDietTemplateVO;
 import com.zz.usercenter.model.domain.vo.UserTrainingCycleVO;
 import com.zz.usercenter.model.domain.vo.UserTrainingTemplateVO;
+import com.zz.usercenter.service.ProfileExtractionService;
 import com.zz.usercenter.service.DietRecordService;
 import com.zz.usercenter.service.ExerciseRecordService;
 import com.zz.usercenter.service.UserDailyMetricService;
@@ -23,6 +28,7 @@ import com.zz.usercenter.service.UserRecordService;
 import com.zz.usercenter.service.UserService;
 import com.zz.usercenter.service.UserTrainingCycleService;
 import com.zz.usercenter.service.UserTrainingTemplateService;
+import com.zz.usercenter.service.UserProfileService;
 import com.zz.usercenter.service.UserWeightRecordService;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
@@ -34,6 +40,7 @@ import org.springframework.web.reactive.function.client.WebClient;
 
 import java.time.LocalDate;
 import java.time.DayOfWeek;
+import java.time.LocalTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.math.BigDecimal;
@@ -76,19 +83,94 @@ public class HealthScheduleService {
     private UserTrainingCycleService userTrainingCycleService;
 
     @Resource
+    private UserProfileService userProfileService;
+
+    @Resource
     private UserTrainingTemplateService userTrainingTemplateService;
+
+    @Resource
+    private ProfileExtractionService profileExtractionService;
+
+    @Resource
+    private UserDietCycleService userDietCycleService;
+
+    @Resource
+    private UserDietDayTemplateService userDietDayTemplateService;
+
+    @Resource
+    private UserDietTemplateService userDietTemplateService;
+
+    @Resource
+    private com.zz.usercenter.common.WeatherHelper weatherHelper;
 
     private static final ObjectMapper objectMapper = new ObjectMapper();
     private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd");
     private static final DateTimeFormatter DISPLAY_FMT = DateTimeFormatter.ofPattern("M月d日");
     private static final String[] WEEKDAYS = {"", "星期一", "星期二", "星期三", "星期四", "星期五", "星期六", "星期日"};
     private static final String[] DAY_NAMES = {"一", "二", "三", "四", "五", "六", "日"};
+    private static final List<String> PLAN_MEAL_ORDER = List.of("早餐", "练后餐", "午餐", "加餐", "晚餐");
     /** 中国时区，避免凌晨定时任务 UTC 错位 */
     private static final ZoneId CN_ZONE = ZoneId.of("Asia/Shanghai");
 
     private String formatDateDisplay(String dateStr) {
         LocalDate date = LocalDate.parse(dateStr, DATE_FMT);
         return DISPLAY_FMT.format(date) + " " + WEEKDAYS[date.getDayOfWeek().getValue()];
+    }
+
+    /**
+     * 每日画像更新 — 每天凌晨1:30，读取前一天提纯文本合并到用户画像
+     */
+    @Scheduled(cron = "0 30 1 * * ?")
+    public void extractProfiles() {
+        log.info("===== 每日画像更新任务开始 =====");
+        try {
+            profileExtractionService.extractAllPendingProfiles();
+        } catch (Exception e) {
+            log.error("每日画像更新任务异常", e);
+        }
+        log.info("===== 每日画像更新任务结束 =====");
+    }
+
+    /**
+     * 每日凌晨0:05，将前一天的体重沿用写入当天（仅对当天无体重记录的用户）
+     */
+    @Scheduled(cron = "0 5 0 * * ?")
+    public void carryOverWeight() {
+        LocalDate today = LocalDate.now(CN_ZONE);
+        log.info("===== 体重沿用任务开始 date={} =====", today);
+        try {
+            List<User> users = userService.list();
+            int carried = 0;
+            for (User user : users) {
+                if (user.getId() == null) continue;
+                // 当天已有记录则跳过
+                List<UserWeightRecord> todayRecords = userWeightRecordService.listByUserAndDateRange(user.getId(), today, today);
+                if (todayRecords != null && !todayRecords.isEmpty()) continue;
+                // 取前一天体重
+                Double latestWeight = userWeightRecordService.getLatestWeightAtOrBefore(user.getId(), today.minusDays(1));
+                if (latestWeight == null || latestWeight <= 0) continue;
+                // 写入当天
+                userWeightRecordService.saveOrUpdateTodayWeight(user.getId(), latestWeight);
+                carried++;
+            }
+            log.info("===== 体重沿用任务结束: totalUsers={}, carried={} =====", users.size(), carried);
+        } catch (Exception e) {
+            log.error("体重沿用任务异常", e);
+        }
+    }
+
+    /**
+     * 每周画像全量刷新 — 每周一00:20，此时dailySummary已完成，weeklyReviews包含完整7天总结
+     */
+    @Scheduled(cron = "0 20 0 * * MON")
+    public void weeklyProfileRefresh() {
+        log.info("===== 每周画像全量刷新任务开始 =====");
+        try {
+            profileExtractionService.weeklyProfileRefresh();
+        } catch (Exception e) {
+            log.error("每周画像全量刷新任务异常", e);
+        }
+        log.info("===== 每周画像全量刷新任务结束 =====");
     }
 
     /**
@@ -141,21 +223,33 @@ public class HealthScheduleService {
             return;
         }
 
-        String userProfile = user.getUserProfile() != null ? user.getUserProfile() : "暂无画像";
+        String userProfile = resolveUserProfileText(user.getId());
+        Long userId = user.getId();
+
+        // 构建当天计划对比文本
+        String trainingPlanText = buildTodayTrainingPlanText(userId, DAY_NAMES[targetDate.getDayOfWeek().getValue() - 1]);
+        String dietPlanText = buildTodayDietPlanText(userId, targetDate);
+        Double targetCalories = resolveTargetCalories(userId);
+        String weightText = buildTodayWeightText(userId, targetDate);
+
         String prompt = buildDailySummaryPrompt(
                 userProfile,
-                buildDailySummaryExerciseInput(user.getId(), targetDate),
-                buildDailySummaryDietInput(user.getId(), targetDate),
-                date
+                buildDailySummaryExerciseInput(userId, targetDate),
+                buildDailySummaryDietInput(userId, targetDate),
+                date,
+                trainingPlanText,
+                dietPlanText,
+                targetCalories,
+                weightText
         );
 
-        String aiResult = callAi(user.getModelPreference(), prompt, 1024, 0.7);
+        String aiResult = callAi(resolvePurificationModelName(user), prompt, 1024, 0.7);
 
         if (aiResult == null || aiResult.isBlank()) {
             log.warn("用户[{}]AI返回为空，使用原始记录", user.getId());
             aiResult = "总结：今天已有训练或饮食记录。\n建议：建议继续保持记录，方便生成更准确总结。\n训练："
-                    + buildDailySummaryExerciseInput(user.getId(), targetDate)
-                    + "\n饮食：" + buildDailySummaryDietInput(user.getId(), targetDate)
+                    + buildDailySummaryExerciseInput(userId, targetDate)
+                    + "\n饮食：" + buildDailySummaryDietInput(userId, targetDate)
                     + "\n问题：无";
         }
 
@@ -175,9 +269,13 @@ public class HealthScheduleService {
             return null;
         }
 
-        String userProfile = user.getUserProfile() != null ? user.getUserProfile() : "暂无画像";
-        String prompt = buildPlannedSummaryPrompt(userProfile, date, daySection);
-        String aiResult = callAi(user.getModelPreference(), prompt, 1024, 0.5);
+        // 无记录分支：补充饮食计划和目标热量
+        String dietPlanText = buildTodayDietPlanText(user.getId(), targetDate);
+        Double targetCalories = resolveTargetCalories(user.getId());
+
+        String userProfile = resolveUserProfileText(user.getId());
+        String prompt = buildPlannedSummaryPrompt(userProfile, date, daySection, dietPlanText, targetCalories);
+        String aiResult = callAi(resolvePurificationModelName(user), prompt, 1024, 0.5);
         if (aiResult == null || aiResult.isBlank()) {
             return buildPlannedSummaryFallback(daySection);
         }
@@ -286,6 +384,7 @@ public class HealthScheduleService {
     }
 
     private void processWeeklySummary(User user) {
+        Long userId = user.getId();
         UserRecord userRecord = userRecordService.getByUserId(user.getId());
         if (userRecord == null) {
             return;
@@ -299,9 +398,9 @@ public class HealthScheduleService {
         // 判断是否全是默认空记录（没有真实运动和饮食数据）
         boolean allEmpty = reviews.stream().allMatch(r -> r.contains("暂无记录"));
 
-        String userProfile = user.getUserProfile() != null ? user.getUserProfile() : "暂无画像";
-        String weeklyWeightSummary = buildWeeklyWeightSummary(user.getId());
-        String weeklyCalorieSummary = buildWeeklyCalorieSummary(user.getId());
+        String userProfile = resolveUserProfileText(userId);
+        String weeklyWeightSummary = buildWeeklyWeightSummary(userId);
+        String weeklyCalorieSummary = buildWeeklyCalorieSummary(userId);
 
         if (allEmpty) {
             String summarySuffix = weeklyWeightSummary.contains("未记录")
@@ -312,59 +411,129 @@ public class HealthScheduleService {
             userRecord.setWeeklySummary(defaultWeekly);
             userRecord.setWeeklyReviews(null);
             userRecordService.saveOrUpdateByUserId(userRecord);
-            log.info("用户[{}]本周无有效记录，写入默认周总结", user.getId());
+            log.info("用户[{}]本周无有效记录，写入默认周总结", userId);
             return;
         }
 
-        String allReviews = String.join("\n\n", reviews);
+        // ========== 第一步：后端拼装7天结构化原始数据 ==========
+        LocalDate weekStart = LocalDate.now(CN_ZONE).minusWeeks(1).with(DayOfWeek.MONDAY);
+        LocalDate weekEnd = weekStart.plusDays(6);
+        String structuredRawData = buildWeeklyStructuredRawData(userId, weekStart, weekEnd);
 
-        String prompt = "你是健身助手Tatan，结合画像和本周每日总结生成上周复盘，同时更新用户画像。\n" +
-                "画像：" + userProfile + "\n" +
-                "请严格按以下格式输出，两部分之间用 ===PROFILE=== 分隔，不要添加其他内容：\n\n" +
-                "【第一部分：周报】纯文本输出，禁止markdown格式(**加粗**、##标题等)，总字数限制在300字以内。\n" +
-                "严格按以下格式输出，不要添加别的标题：\n" +
+        // ========== 第二步：提纯模型压缩原始数据 ==========
+        String purificationPrompt = "你是一个数据整理助手。将以下一周的原始健身数据整理成简洁的结构化摘要。\n" +
+                "规则：\n" +
+                "- 保留所有关键数字（热量、体重、训练天数等），不要丢失数据\n" +
+                "- 按训练、饮食、体重三个维度分块整理\n" +
+                "- 去掉冗余描述，只保留关键信息\n" +
+                "- 500字以内\n" +
+                "- 纯文本，不要markdown格式\n\n" +
+                structuredRawData;
+
+        String modelName = resolvePurificationModelName(user);
+        String purifiedData = callAi(modelName, purificationPrompt, 800, 0.3);
+
+        // 提纯失败时用原始数据拼接（降级）
+        String dataForSummary;
+        if (purifiedData == null || purifiedData.isBlank()) {
+            log.warn("用户[{}]周数据提纯失败，降级使用原始文本", userId);
+            dataForSummary = "体重变化：" + weeklyWeightSummary + "\n热量变化：" + weeklyCalorieSummary
+                    + "\n\n每日总结：\n" + String.join("\n\n", reviews);
+        } else {
+            dataForSummary = purifiedData.trim();
+        }
+
+        // ========== 第三步：聪明模型生成周报 ==========
+        String summaryPrompt = "你是健身助手Tatan，结合用户画像和本周整理数据生成上周复盘。\n" +
+                "画像：" + userProfile + "\n\n" +
+                "纯文本输出，禁止markdown格式，总字数限制在300字以内。\n" +
+                "严格按以下格式输出：\n" +
                 "总结：一句话概括本周整体状态。\n" +
                 "训练：概括本周练得怎么样，训练频率、完成度和表现如何。\n" +
                 "饮食：概括本周吃得怎么样，饮食执行和营养情况如何。\n" +
                 "建议：给出1条最值得执行的下周建议。\n" +
-                "若存在体重记录，请在总结或建议中自然体现体重变化；若无记录，不要硬写体重趋势。\n" +
-                "若存在热量记录，请结合热量盈亏判断饮食执行情况；若无记录，不要脑补。\n" +
                 "数据真实，建议简洁落地。\n\n" +
-                "===PROFILE===\n\n" +
-                "【第二部分：画像更新】根据旧画像和周报，更新用户画像。\n" +
-                "- 保留旧画像中仍然准确的内容（伤病、器械偏好、训练习惯等）\n" +
-                "- 根据周报更新变化的部分\n" +
-                "- 100字以内，不废话\n" +
-                "- 不要加任何前缀，直接输出画像内容\n\n" +
-                "体重变化：" + weeklyWeightSummary + "\n\n" +
-                "热量变化：" + weeklyCalorieSummary + "\n\n" +
-                "每日总结：\n" + allReviews;
+                "本周数据：\n" + dataForSummary;
 
-        String aiResult = callAi(user.getModelPreference(), prompt, 1500, 0.7);
+        String aiResult = callAi(user.getModelPreference(), summaryPrompt, 1500, 0.7);
 
         String weeklySummary;
-        String profileResult = null;
         if (aiResult == null || aiResult.isBlank()) {
             weeklySummary = "总结：本周总结生成失败，请查看每日记录了解详情。\n训练：暂无可靠汇总。\n饮食：暂无可靠汇总。\n建议：下周继续保持记录，方便生成更准确的周总结。";
-        } else if (aiResult.contains("===PROFILE===")) {
-            String[] parts = aiResult.split("===PROFILE===\\s*", 2);
-            weeklySummary = parts[0].trim();
-            profileResult = parts.length > 1 ? parts[1].trim() : null;
         } else {
             weeklySummary = aiResult.trim();
         }
-
         userRecord.setWeeklySummary(weeklySummary);
+
+        // 第四步：用周报+旧画像更新用户画像（与周报解耦）
+        String profilePrompt = "你是健身助手Tatan，根据旧画像和本周周报更新用户画像。\n" +
+                "旧画像：" + userProfile + "\n\n" +
+                "本周周报：\n" + weeklySummary + "\n\n" +
+                "规则：\n" +
+                "- 保留旧画像中仍然准确的内容（伤病、器械偏好、训练习惯等）\n" +
+                "- 根据周报更新变化的部分\n" +
+                "- 100字以内，不废话\n" +
+                "- 不要加任何前缀或标题，直接输出画像内容";
+
+        String profileResult = callAi(user.getModelPreference(), profilePrompt, 300, 0.5);
         if (profileResult != null && !profileResult.isBlank()) {
-            User updateUser = new User();
-            updateUser.setId(user.getId());
-            updateUser.setUserProfile(profileResult);
-            userService.updateById(updateUser);
+            UserProfile profile = new UserProfile();
+            profile.setUserId(userId);
+            profile.setUserProfileText(profileResult.trim());
+            userProfileService.saveOrUpdate(userId, profile);
         }
         userRecord.setWeeklyReviews(null);
         userRecordService.saveOrUpdateByUserId(userRecord);
 
-        log.info("用户[{}]每周总结+画像更新成功", user.getId());
+        log.info("用户[{}]每周总结+画像更新成功（结构化数据→提纯→生成）", userId);
+    }
+
+    /**
+     * 拼装一周7天的结构化原始数据（运动+饮食+计划+体重+热量）
+     */
+    private String buildWeeklyStructuredRawData(Long userId, LocalDate weekStart, LocalDate weekEnd) {
+        StringBuilder sb = new StringBuilder();
+
+        // 1. 体重变化
+        sb.append("【体重变化】\n").append(buildWeeklyWeightSummary(userId)).append("\n\n");
+
+        // 2. 热量汇总
+        sb.append("【热量汇总】\n").append(buildWeeklyCalorieSummary(userId)).append("\n\n");
+
+        // 3. 每日明细（7天）
+        for (LocalDate date = weekStart; !date.isAfter(weekEnd); date = date.plusDays(1)) {
+            String dayName = WEEKDAYS[date.getDayOfWeek().getValue()];
+            sb.append("【").append(DISPLAY_FMT.format(date)).append(" ").append(dayName).append("】\n");
+
+            // 训练
+            String exerciseInput = buildDailySummaryExerciseInput(userId, date);
+            sb.append("训练记录：").append(exerciseInput).append("\n");
+
+            // 饮食
+            String dietInput = buildDailySummaryDietInput(userId, date);
+            sb.append("饮食记录：").append(dietInput).append("\n");
+
+            // 计划对比
+            String dayIndex = DAY_NAMES[date.getDayOfWeek().getValue() - 1];
+            String trainingPlan = buildTodayTrainingPlanText(userId, dayIndex);
+            String dietPlan = buildTodayDietPlanText(userId, date);
+            if (trainingPlan != null) {
+                sb.append("训练计划：").append(trainingPlan).append("\n");
+            }
+            if (dietPlan != null) {
+                sb.append("饮食计划：").append(dietPlan).append("\n");
+            }
+
+            sb.append("\n");
+        }
+
+        // 4. 目标热量
+        Double targetCal = resolveTargetCalories(userId);
+        if (targetCal != null) {
+            sb.append("【目标热量】每日").append(targetCal.intValue()).append("大卡\n");
+        }
+
+        return sb.toString().trim();
     }
 
     private UserRecord getOrCreateUserRecord(Long userId) {
@@ -378,7 +547,8 @@ public class HealthScheduleService {
     }
 
     private String callAi(String modelName, String prompt, int maxTokens, double temperature) {
-        AiModelConfig.ModelProvider provider = aiModelConfig.getProvider(modelName);
+        String resolvedModel = resolveModelName(modelName);
+        AiModelConfig.ModelProvider provider = aiModelConfig.getProvider(resolvedModel);
         try {
             WebClient webClient = WebClient.builder()
                     .baseUrl(provider.getBaseUrl())
@@ -414,18 +584,54 @@ public class HealthScheduleService {
         return null;
     }
 
-    private String buildDailySummaryPrompt(String userProfile, String exerciseInput, String dietInput, String date) {
-        return "你是健身助手Tatan，对" + formatDateDisplay(date) + "的记录做总结。\n" +
-                "纯文本，禁止markdown，总字数限制在220字以内。严格按以下格式输出：\n" +
-                "总结：一句话概括今天状态。\n" +
-                "建议：给出1条最值得执行的建议。\n" +
-                "训练：列出动作、组数或时长，并一句话点评。\n" +
-                "饮食：概括当天饮食摄入。\n" +
-                "问题：如无明显问题可写“无”。\n" +
-                "数据真实，禁止虚构。\n\n" +
-                "用户画像：" + userProfile + "\n" +
-                "结构化训练记录：" + exerciseInput + "\n" +
-                "结构化饮食记录：" + dietInput;
+    private String resolveModelName(String raw) {
+        if (raw == null || raw.isBlank()) return aiModelConfig.getDefaultModel();
+        try {
+            Map<String, String> map = new ObjectMapper().readValue(raw, new TypeReference<Map<String, String>>() {});
+            String current = map.get("current");
+            return (current != null && !current.isBlank()) ? current : aiModelConfig.getDefaultModel();
+        } catch (Exception e) {
+            return raw.isBlank() ? aiModelConfig.getDefaultModel() : raw;
+        }
+    }
+
+    private String resolveUserProfileText(Long userId) {
+        UserProfile p = userProfileService.getByUserId(userId);
+        if (p != null && p.getUserProfileText() != null && !p.getUserProfileText().isBlank()) {
+            return p.getUserProfileText();
+        }
+        return "暂无画像";
+    }
+
+    private String buildDailySummaryPrompt(String userProfile, String exerciseInput, String dietInput, String date,
+                                            String trainingPlanText, String dietPlanText,
+                                            Double targetCalories, String weightText) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("你是健身助手Tatan，对").append(formatDateDisplay(date)).append("的记录做总结。\n");
+        sb.append("纯文本，禁止markdown，总字数限制在280字以内。严格按以下格式输出：\n");
+        sb.append("总结：一句话概括今天状态。\n");
+        sb.append("建议：给出1条最值得执行的建议。\n");
+        sb.append("训练：列出动作、组数或时长，并一句话点评。如有训练计划，对比计划完成度。\n");
+        sb.append("饮食：概括当天饮食摄入。如有饮食计划，对比计划执行度。\n");
+        sb.append("匹配度：如果训练和饮食数据都有，分析训练消耗与饮食摄入的匹配情况（蛋白质是否充足、热量是否合理），表扬好的指出不足的。\n");
+        sb.append("问题：如无明显问题可写\"无\"。\n");
+        sb.append("数据真实，禁止虚构。\n\n");
+        sb.append("用户画像：").append(userProfile).append("\n");
+        if (weightText != null) {
+            sb.append("体重：").append(weightText).append("\n");
+        }
+        if (targetCalories != null) {
+            sb.append("目标热量：").append(targetCalories.intValue()).append("大卡\n");
+        }
+        if (trainingPlanText != null) {
+            sb.append("今日训练计划：").append(trainingPlanText).append("\n");
+        }
+        if (dietPlanText != null) {
+            sb.append("今日饮食计划：").append(dietPlanText).append("\n");
+        }
+        sb.append("结构化训练记录：").append(exerciseInput).append("\n");
+        sb.append("结构化饮食记录：").append(dietInput);
+        return sb.toString();
     }
 
     private String buildDailySummaryExerciseInput(Long userId, LocalDate date) {
@@ -437,10 +643,14 @@ public class HealthScheduleService {
         for (Map<String, Object> session : sessions) {
             String sessionName = String.valueOf(session.get("name") == null ? "" : session.get("name")).trim();
             Integer sessionDuration = parseInteger(session.get("durationSeconds"));
+            Integer sessionCalories = parseInteger(session.get("caloriesBurned"));
             if (!sessionName.isBlank()) {
                 sb.append("训练：").append(sessionName);
                 if (sessionDuration != null && sessionDuration > 0) {
                     sb.append("，").append(Math.max(1, sessionDuration / 60)).append("分钟");
+                }
+                if (sessionCalories != null && sessionCalories > 0) {
+                    sb.append("，消耗").append(sessionCalories).append("大卡");
                 }
                 sb.append("\n");
             }
@@ -472,6 +682,11 @@ public class HealthScheduleService {
                 sb.append("\n");
             }
         }
+        // 追加当日总消耗
+        int totalBurned = exerciseRecordService.getDayTotalCaloriesBurned(userId, date);
+        if (totalBurned > 0) {
+            sb.append("\n当日总消耗：").append(totalBurned).append("大卡");
+        }
         return sb.length() == 0 ? "暂无训练记录" : sb.toString().trim();
     }
 
@@ -491,7 +706,22 @@ public class HealthScheduleService {
             if (!mealType.isBlank()) {
                 sb.append(mealType).append("：");
             }
-            sb.append(name).append("\n");
+            sb.append(name);
+            // 追加每餐热量
+            Object cal = item.get("calories");
+            if (cal != null) {
+                sb.append("（").append(cal).append("kcal）");
+            }
+            sb.append("\n");
+        }
+        // 追加宏量汇总
+        Map<String, Object> macro = dietRecordService.getDayMacroSummary(userId, date);
+        if (Boolean.TRUE.equals(macro.get("hasRecord"))) {
+            sb.append("\n当日摄入汇总：")
+                    .append("热量").append(macro.get("calories")).append("kcal")
+                    .append("，蛋白质").append(macro.get("protein")).append("g")
+                    .append("，碳水").append(macro.get("carbs")).append("g")
+                    .append("，脂肪").append(macro.get("fat")).append("g");
         }
         return sb.length() == 0 ? "暂无饮食记录" : sb.toString().trim();
     }
@@ -510,17 +740,32 @@ public class HealthScheduleService {
         return null;
     }
 
-    private String buildPlannedSummaryPrompt(String userProfile, String date, String daySection) {
-        return "你是健身助手Tatan。用户在" + formatDateDisplay(date) + "没有主动记录运动和饮食，请根据训练计划生成一份提醒型昨日总结。\n" +
-                "纯文本，禁止markdown，总字数限制在220字以内。严格按以下格式输出：\n" +
-                "总结：一句话概括昨天应完成的安排。\n" +
-                "建议：给出1条最值得执行的建议，并在这句里自然带上“昨日没记录哦”。\n" +
-                "训练：根据计划概括昨天应完成的训练内容。\n" +
-                "饮食：写“暂无饮食记录”。\n" +
-                "问题：说明无法确认是否按计划完成。\n" +
-                "不要假装用户已经完成训练，不要编造饮食记录。\n\n" +
-                "用户画像：" + userProfile + "\n" +
-                "昨日训练计划：" + daySection;
+    private String buildPlannedSummaryPrompt(String userProfile, String date, String daySection,
+                                              String dietPlanText, Double targetCalories) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("你是健身助手Tatan。用户在").append(formatDateDisplay(date))
+                .append("没有主动记录运动和饮食，请根据计划生成一份提醒型昨日总结。\n");
+        sb.append("纯文本，禁止markdown，总字数限制在220字以内。严格按以下格式输出：\n");
+        sb.append("总结：一句话概括昨天应完成的安排。\n");
+        sb.append("建议：给出1条最值得执行的建议，并在这句里自然带上\"昨日没记录哦\"。\n");
+        sb.append("训练：根据计划概括昨天应完成的训练内容。\n");
+        sb.append("饮食：");
+        if (dietPlanText != null) {
+            sb.append("根据饮食计划概括昨天应摄入的内容，但用户没有记录实际饮食。\n");
+        } else {
+            sb.append("暂无饮食记录。\n");
+        }
+        sb.append("问题：说明无法确认是否按计划完成。\n");
+        sb.append("不要假装用户已经完成训练，不要编造饮食记录。\n\n");
+        sb.append("用户画像：").append(userProfile).append("\n");
+        if (targetCalories != null) {
+            sb.append("目标热量：").append(targetCalories.intValue()).append("大卡\n");
+        }
+        sb.append("昨日训练计划：").append(daySection);
+        if (dietPlanText != null) {
+            sb.append("\n昨日饮食计划：").append(dietPlanText);
+        }
+        return sb.toString();
     }
 
     private String buildPlannedSummaryFallback(String daySection) {
@@ -694,5 +939,388 @@ public class HealthScheduleService {
         } catch (JsonProcessingException e) {
             return "[]";
         }
+    }
+
+    // ========== 晚间主动提醒 ==========
+
+    private static final LocalTime EVENING_REMINDER_TIME = LocalTime.of(20, 0);
+
+    /**
+     * 晚间主动提醒 — 每天19:50，检查用户今日记录vs计划，有问题则调AI生成提醒
+     */
+    @Scheduled(cron = "0 50 19 * * ?")
+    public void eveningReminder() {
+        String today = LocalDate.now(CN_ZONE).format(DATE_FMT);
+        log.info("===== 晚间主动提醒任务开始，日期：{} =====", today);
+
+        List<User> users = userService.list();
+        if (users.isEmpty()) {
+            log.info("无用户需要生成晚间提醒");
+            return;
+        }
+
+        for (User user : users) {
+            try {
+                processEveningReminder(user, LocalDate.now(CN_ZONE));
+            } catch (Exception e) {
+                log.error("用户[{}]晚间提醒生成失败", user.getId(), e);
+            }
+        }
+        log.info("===== 晚间主动提醒任务结束 =====");
+    }
+
+    private void processEveningReminder(User user, LocalDate today) {
+        Long userId = user.getId();
+        boolean hasTrainingPlan = hasActiveTrainingPlan(userId);
+        boolean hasDietPlan = hasActiveDietPlan(userId);
+        boolean hasExerciseRecord = exerciseRecordService.hasRecord(userId, today);
+        boolean hasDietRecord = dietRecordService.hasRecord(userId, today);
+
+        // 没有任何计划和记录，不需要提醒
+        if (!hasTrainingPlan && !hasDietPlan && !hasExerciseRecord && !hasDietRecord) {
+            return;
+        }
+
+        // 两种情况需要提醒：有计划但没记录，或者有记录但需要对比
+        String planVsRecordDesc = buildPlanVsRecordDescription(
+                userId, today, hasTrainingPlan, hasDietPlan, hasExerciseRecord, hasDietRecord);
+
+        if (planVsRecordDesc == null || planVsRecordDesc.isBlank()) {
+            return;
+        }
+
+        // 调提纯模型生成提醒内容
+        String userProfile = resolveUserProfileText(userId);
+        String prompt = buildEveningReminderPrompt(userProfile, planVsRecordDesc);
+        String modelName = resolvePurificationModelName(user);
+        String aiResult = callAi(modelName, prompt, 256, 0.7);
+
+        if (aiResult == null || aiResult.isBlank()) {
+            aiResult = buildEveningReminderFallback(planVsRecordDesc);
+        }
+
+        // 存入 UserRecord
+        UserRecord userRecord = getOrCreateUserRecord(userId);
+        userRecord.setEveningReminder(aiResult);
+        userRecordService.saveOrUpdateByUserId(userRecord);
+        log.info("用户[{}]晚间提醒已生成", userId);
+    }
+
+    private boolean hasActiveTrainingPlan(Long userId) {
+        UserTrainingCycleVO cycle = userTrainingCycleService.getActiveCycle(userId);
+        return cycle != null;
+    }
+
+    private boolean hasActiveDietPlan(Long userId) {
+        return userDietCycleService.getActiveCycle(userId) != null;
+    }
+
+    private String buildPlanVsRecordDescription(Long userId, LocalDate today,
+                                                 boolean hasTrainingPlan, boolean hasDietPlan,
+                                                 boolean hasExerciseRecord, boolean hasDietRecord) {
+        StringBuilder desc = new StringBuilder();
+        String dayName = DAY_NAMES[today.getDayOfWeek().getValue() - 1];
+
+        if (hasTrainingPlan) {
+            String trainingPlanText = buildTodayTrainingPlanText(userId, dayName);
+            if (hasExerciseRecord) {
+                String exerciseRecordText = buildDailySummaryExerciseInput(userId, today);
+                desc.append("今日训练计划：").append(trainingPlanText != null ? trainingPlanText : "休息日");
+                desc.append("\n今日实际训练：").append(exerciseRecordText);
+            } else {
+                desc.append("今日训练计划：").append(trainingPlanText != null ? trainingPlanText : "休息日");
+                desc.append("\n今日实际训练：无记录");
+            }
+        } else if (hasExerciseRecord) {
+            // 没有计划但有记录，也展示
+            String exerciseRecordText = buildDailySummaryExerciseInput(userId, today);
+            desc.append("今日训练记录：").append(exerciseRecordText);
+        }
+
+        if (hasDietPlan) {
+            String dietPlanText = buildTodayDietPlanText(userId, today);
+            if (desc.length() > 0) desc.append("\n\n");
+            if (hasDietRecord) {
+                String dietRecordText = buildDailySummaryDietInput(userId, today);
+                desc.append("今日饮食计划：").append(dietPlanText != null ? dietPlanText : "已安排");
+                desc.append("\n今日实际饮食：").append(dietRecordText);
+            } else {
+                desc.append("今日饮食计划：").append(dietPlanText != null ? dietPlanText : "已安排");
+                desc.append("\n今日实际饮食：无记录");
+            }
+        } else if (hasDietRecord) {
+            // 没有计划但有记录，也展示
+            String dietRecordText = buildDailySummaryDietInput(userId, today);
+            if (desc.length() > 0) desc.append("\n\n");
+            desc.append("今日饮食记录：").append(dietRecordText);
+        }
+
+        // 追加目标热量对比
+        if (hasExerciseRecord || hasDietRecord) {
+            desc.append("\n\n");
+            int burned = exerciseRecordService.getDayTotalCaloriesBurned(userId, today);
+            Map<String, Object> macro = dietRecordService.getDayMacroSummary(userId, today);
+            int intake = (int) macro.getOrDefault("calories", 0);
+            desc.append("训练消耗：").append(burned).append("大卡");
+            desc.append("\n饮食摄入：").append(intake).append("大卡");
+            Double targetCal = resolveTargetCalories(userId);
+            if (targetCal != null) {
+                desc.append("\n目标热量：").append(targetCal.intValue()).append("大卡");
+            }
+            if (burned > 0 || intake > 0) {
+                desc.append("\n净热量：").append(intake - burned).append("大卡");
+            }
+        }
+
+        return desc.toString().trim();
+    }
+
+    private String buildTodayTrainingPlanText(Long userId, String dayName) {
+        String fullPlanText = buildTrainingPlanText(userId);
+        if (fullPlanText == null || fullPlanText.isBlank()) {
+            return null;
+        }
+        String section = extractDaySection(fullPlanText, dayName);
+        return (section != null && !section.isBlank()) ? section : "休息日";
+    }
+
+    private String resolvePurificationModelName(User user) {
+        try {
+            Map<String, String> prefs = new ObjectMapper().readValue(
+                    user.getModelPreference(), new TypeReference<Map<String, String>>() {});
+            String pm = prefs.get("purificationModel");
+            return (pm != null && !pm.isBlank()) ? pm.trim() : aiModelConfig.getPurificationModel();
+        } catch (Exception e) {
+            return aiModelConfig.getPurificationModel();
+        }
+    }
+
+    private String buildEveningReminderPrompt(String userProfile, String planVsRecord) {
+        return "你是健身助手Tatan，现在是晚上7:50，根据用户今日的计划和实际记录做一段简短友好的提醒。\n" +
+                "纯文本，禁止markdown，字数150字以内。\n" +
+                "要求：\n" +
+                "1. 如果用户已完成计划，给予鼓励\n" +
+                "2. 如果用户没记录或有差距，温和提醒\n" +
+                "3. 结合训练消耗和饮食摄入的匹配度给出建议（如蛋白质是否充足）\n" +
+                "4. 语气轻松自然，像朋友一样\n" +
+                "5. 只输出提醒内容，不要输出其他分析\n\n" +
+                "用户画像：" + userProfile + "\n" +
+                "今日计划与记录对比：\n" + planVsRecord;
+    }
+
+    private String buildEveningReminderFallback(String planVsRecord) {
+        return "晚上好！今天还没记录运动和饮食哦，记得打卡~";
+    }
+
+    // ========== 早间天气+训练计划提醒 ==========
+
+    /**
+     * 早间提醒 — 每天07:50，获取天气+今日训练计划，调AI生成提醒
+     */
+    @Scheduled(cron = "0 50 7 * * ?")
+    public void morningReminder() {
+        String today = LocalDate.now(CN_ZONE).format(DATE_FMT);
+        log.info("===== 早间天气提醒任务开始，日期：{} =====", today);
+
+        List<User> users = userService.list();
+        if (users.isEmpty()) {
+            log.info("无用户需要生成早间提醒");
+            return;
+        }
+
+        for (User user : users) {
+            try {
+                processMorningReminder(user, LocalDate.now(CN_ZONE));
+            } catch (Exception e) {
+                log.error("用户[{}]早间提醒生成失败", user.getId(), e);
+            }
+        }
+        log.info("===== 早间天气提醒任务结束 =====");
+    }
+
+    private void processMorningReminder(User user, LocalDate today) {
+        Long userId = user.getId();
+        String dayName = DAY_NAMES[today.getDayOfWeek().getValue() - 1];
+
+        // 1. 获取天气（优先用用户城市，否则默认北京）
+        String userCity = (user.getCity() != null && !user.getCity().isBlank()) ? user.getCity() : "北京";
+        String userCityEn = (user.getCityEn() != null && !user.getCityEn().isBlank()) ? user.getCityEn() : "Beijing";
+        String weatherContext = weatherHelper.buildWeatherContext(userCity, userCityEn);
+
+        // 2. 获取今日训练计划
+        String trainingPlanText = null;
+        UserTrainingCycleVO activeCycle = userTrainingCycleService.getActiveCycle(userId);
+        if (activeCycle != null) {
+            trainingPlanText = buildTodayTrainingPlanText(userId, dayName);
+        }
+
+        if (weatherContext == null && trainingPlanText == null) {
+            return;
+        }
+
+        // 3. 调AI生成提醒
+        String userProfile = resolveUserProfileText(userId);
+        String prompt = buildMorningReminderPrompt(userProfile, weatherContext, trainingPlanText, dayName);
+        String modelName = resolvePurificationModelName(user);
+        String aiResult = callAi(modelName, prompt, 256, 0.7);
+
+        if (aiResult == null || aiResult.isBlank()) {
+            aiResult = buildMorningReminderFallback(weatherContext, trainingPlanText);
+        }
+
+        // 4. 存入 UserRecord
+        UserRecord userRecord = getOrCreateUserRecord(userId);
+        userRecord.setMorningReminder(aiResult);
+        userRecordService.saveOrUpdateByUserId(userRecord);
+        log.info("用户[{}]早间提醒已生成", userId);
+    }
+
+    private String buildMorningReminderPrompt(String userProfile, String weatherContext,
+                                                String trainingPlanText, String dayName) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("你是健身助手Tatan，现在是早上7:50，给用户发一条简短的早间提醒。\n");
+        sb.append("纯文本，禁止markdown，字数150字以内。\n");
+        sb.append("要求：\n");
+        sb.append("1. 先播报今日天气。判断冷暖体感以气温和湿度数据为准，\"天气评估\"标签是后端根据温度/湿度阈值算好的，直接使用即可。注意：阴天/多云/晴只表示云量多少，不代表体感温度，不要用它们来判断热不热\n");
+        sb.append("2. 如果今天有训练计划，告诉用户今天该练什么\n");
+        sb.append("3. 如果今天是休息日，提醒适当恢复\n");
+        sb.append("4. 提醒用户早上记得记录体重\n");
+        sb.append("5. 语气轻松自然，像朋友一样\n");
+        sb.append("6. 只输出提醒内容，不要输出其他分析\n\n");
+        sb.append("用户画像：").append(userProfile).append("\n");
+        if (weatherContext != null) {
+            sb.append("今日天气：\n").append(weatherContext).append("\n");
+        }
+        if (trainingPlanText != null) {
+            sb.append("周").append(dayName).append("训练计划：").append(trainingPlanText).append("\n");
+        } else {
+            sb.append("训练计划：无激活计划或今天是休息日\n");
+        }
+        return sb.toString();
+    }
+
+    private String buildMorningReminderFallback(String weatherContext, String trainingPlanText) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("早上好！新的一天开始了~");
+        if (weatherContext != null) {
+            sb.append("记得关注天气变化，合理安排训练。");
+        }
+        if (trainingPlanText != null) {
+            sb.append("今天有训练计划哦，加油完成！");
+        }
+        sb.append("记得称一下体重记录一下哦~");
+        return sb.toString();
+    }
+
+    // ========== 公共工具方法 ==========
+
+    private String normalizeMealType(String mealType) {
+        if (mealType == null || mealType.isBlank()) return "加餐";
+        if (mealType.contains("练后")) return "练后餐";
+        if (mealType.contains("早餐")) return "早餐";
+        if (mealType.contains("午餐") || mealType.contains("午饭")) return "午餐";
+        if (mealType.contains("晚餐") || mealType.contains("晚饭")) return "晚餐";
+        return "加餐";
+    }
+
+    private String safeTrim(String s) {
+        return s == null ? "" : s.trim();
+    }
+
+    /**
+     * 获取用户目标热量（优先customDailyCalories，fallback dailyCalorieBurn）
+     */
+    private Double resolveTargetCalories(Long userId) {
+        UserProfile p = userProfileService.getByUserId(userId);
+        if (p == null) return null;
+        if (p.getCustomDailyCalories() != null && p.getCustomDailyCalories() > 0) {
+            return p.getCustomDailyCalories();
+        }
+        if (p.getDailyCalorieBurn() != null && p.getDailyCalorieBurn() > 0) {
+            return p.getDailyCalorieBurn();
+        }
+        return null;
+    }
+
+    /**
+     * 构建当天饮食计划文本（具体食物+用量+热量）
+     */
+    private String buildTodayDietPlanText(Long userId, LocalDate date) {
+        if (userId == null) return null;
+        UserDietCycleVO activeCycle = userDietCycleService.getActiveCycle(userId);
+        if (activeCycle == null || activeCycle.getDays() == null || activeCycle.getDays().isEmpty()) {
+            return null;
+        }
+        Map<Long, UserDietDayTemplateVO> dayTemplateMap = userDietDayTemplateService.listDayTemplates(userId).stream()
+                .collect(java.util.stream.Collectors.toMap(UserDietDayTemplateVO::getId, Function.identity(), (a, b) -> a, LinkedHashMap::new));
+        Map<Long, UserDietTemplateVO> mealTemplateMap = userDietTemplateService.listTemplates(userId).stream()
+                .collect(java.util.stream.Collectors.toMap(UserDietTemplateVO::getId, Function.identity(), (a, b) -> a, LinkedHashMap::new));
+
+        int todayIndex = activeCycle.getTodayIndex() == null ? 1 : activeCycle.getTodayIndex();
+        String dayName = DAY_NAMES[date.getDayOfWeek().getValue() - 1];
+        // 根据日期的星期几匹配对应的dayIndex
+        int targetDayIndex = date.getDayOfWeek().getValue(); // 1=周一...7=周日
+        // cycle的dayIndex从1开始，dayCount决定循环
+        int cycleDayIndex = ((targetDayIndex - 1) % activeCycle.getDayCount()) + 1;
+
+        final int dayIdx = cycleDayIndex;
+        UserDietCycleVO.CycleDayVO day = activeCycle.getDays().stream()
+                .filter(d -> d.getDayIndex() != null && d.getDayIndex() == dayIdx)
+                .findFirst()
+                .orElse(null);
+        if (day == null || day.getDayTemplateId() == null) {
+            return null;
+        }
+
+        UserDietDayTemplateVO dayTemplate = dayTemplateMap.get(day.getDayTemplateId());
+        if (dayTemplate == null || dayTemplate.getMealSlots() == null || dayTemplate.getMealSlots().isEmpty()) {
+            return null;
+        }
+
+        StringBuilder sb = new StringBuilder();
+        for (String mealType : PLAN_MEAL_ORDER) {
+            UserDietDayTemplateVO.MealSlotVO slot = dayTemplate.getMealSlots().stream()
+                    .filter(meal -> mealType.equals(normalizeMealType(meal.getMealType())))
+                    .findFirst()
+                    .orElse(null);
+            if (slot == null || slot.getTemplateId() == null) continue;
+            UserDietTemplateVO mealTemplate = mealTemplateMap.get(slot.getTemplateId());
+            if (mealTemplate == null || mealTemplate.getItems() == null || mealTemplate.getItems().isEmpty()) continue;
+            sb.append(mealType).append("：");
+            List<String> foodNames = new ArrayList<>();
+            for (UserDietTemplateVO.DietTemplateItemVO item : mealTemplate.getItems()) {
+                foodNames.add(safeTrim(item.getFoodName())
+                        + (item.getAmount() != null ? item.getAmount().stripTrailingZeros().toPlainString() : "")
+                        + safeTrim(item.getUnit()));
+            }
+            sb.append(String.join("、", foodNames)).append("\n");
+        }
+        return sb.toString().trim();
+    }
+
+    /**
+     * 构建当天体重文本
+     */
+    private String buildTodayWeightText(Long userId, LocalDate date) {
+        List<UserWeightRecord> records = userWeightRecordService.listByUserAndDateRange(userId, date, date);
+        if (records.isEmpty()) {
+            Double latest = userWeightRecordService.getLatestWeightAtOrBefore(userId, date.minusDays(1));
+            if (latest != null && latest > 0) {
+                return "昨日体重" + latest + "kg，今日未记录。";
+            }
+            return null;
+        }
+        BigDecimal weight = records.get(records.size() - 1).getWeight();
+        String weightText = weight.stripTrailingZeros().toPlainString() + "kg";
+        // 对比目标体重
+        UserProfile p = userProfileService.getByUserId(userId);
+        if (p != null && p.getTargetWeight() != null && p.getTargetWeight() > 0) {
+            BigDecimal diff = weight.subtract(BigDecimal.valueOf(p.getTargetWeight()));
+            String diffText = diff.compareTo(BigDecimal.ZERO) > 0
+                    ? "距目标+" + diff.stripTrailingZeros().toPlainString() + "kg"
+                    : "距目标" + diff.stripTrailingZeros().toPlainString() + "kg";
+            return "今日体重" + weightText + "（" + diffText + "）";
+        }
+        return "今日体重" + weightText;
     }
 }

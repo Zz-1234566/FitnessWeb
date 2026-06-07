@@ -72,11 +72,78 @@
   display: flex;
   flex-direction: column;
   justify-content: center;
+  position: relative;
 }
 
 .ex-today-card:hover {
   border-color: rgba(22, 74, 65, 0.14);
   box-shadow: 0 2px 4px rgba(15, 23, 42, 0.05), 0 10px 24px rgba(15, 23, 42, 0.04);
+}
+
+.ex-card-gear {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  border: none;
+  background: rgba(22, 74, 65, 0.06);
+  color: var(--text-3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.16s ease;
+  z-index: 1;
+}
+
+.ex-card-gear:hover {
+  background: rgba(22, 74, 65, 0.12);
+  color: var(--brand);
+}
+
+.ex-manager-tabs {
+  display: flex;
+  border-bottom: 1px solid rgba(22, 74, 65, 0.06);
+}
+
+.ex-manager-tab {
+  padding: 10px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-3);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  transition: color 0.15s, border-color 0.15s;
+  white-space: nowrap;
+}
+
+.ex-manager-tab:hover {
+  color: var(--brand);
+}
+
+.ex-manager-tab--active {
+  color: var(--brand);
+  border-bottom-color: var(--brand);
+}
+
+.ex-manager-list {
+  padding: 12px 0 8px;
+}
+
+.ex-manager-batch-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: rgba(22, 74, 65, 0.04);
+  border-radius: 8px;
+  margin: 8px 0;
+  font-size: 13px;
+  color: var(--text-2);
 }
 
 .ex-today-card-label {
@@ -712,11 +779,21 @@
 .ex-day-template-card-head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 8px;
   margin-bottom: 8px;
 }
 
+.ex-day-template-card-head .ant-checkbox-wrapper {
+  flex-shrink: 0;
+  margin: 0;
+}
+
 .ex-day-template-card-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-weight: 600;
   font-size: 14px;
   color: var(--text);
@@ -770,9 +847,9 @@
   gap: 8px;
 }
 
-.ex-diet-my-foods {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  .ex-diet-my-foods {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
   margin-bottom: 4px;
   max-height: 184px;
@@ -782,9 +859,77 @@
   scrollbar-width: none;
 }
 
-.ex-diet-my-foods::-webkit-scrollbar {
-  display: none;
-}
+  .ex-diet-my-foods::-webkit-scrollbar {
+    display: none;
+  }
+
+  .ex-diet-my-foods--recent {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    margin-bottom: 12px;
+    max-height: none;
+  }
+
+  .ex-diet-recent-card {
+    padding: 14px;
+    margin-bottom: 12px;
+    border-radius: 16px;
+    border: 1px solid rgba(22, 74, 65, 0.1);
+    background: linear-gradient(180deg, rgba(22, 74, 65, 0.03), rgba(255, 255, 255, 0.96));
+  }
+
+  .ex-diet-recent-card__head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .ex-diet-recent-card__title {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text);
+  }
+
+  .ex-diet-recent-card__meta {
+    margin-top: 4px;
+    font-size: 12px;
+    color: var(--text-3);
+  }
+
+  .ex-diet-recent-card__foods {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 12px;
+  }
+
+  .ex-diet-recent-card__food,
+  .ex-diet-recent-food-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    padding: 6px 10px;
+    border-radius: 999px;
+    background: rgba(22, 74, 65, 0.06);
+    color: var(--text-2);
+    font-size: 12px;
+    line-height: 1.4;
+  }
+
+  .ex-diet-recent-food-chip {
+    width: 100%;
+    justify-content: flex-start;
+    border: 1px solid rgba(22, 74, 65, 0.08);
+    background: rgba(255, 255, 255, 0.98);
+    cursor: pointer;
+  }
+
+  .ex-diet-recent-food-chip span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
 
 .ex-diet-my-food-chip {
   display: flex;
@@ -1935,12 +2080,19 @@
     padding: 14px 14px 12px;
   }
   .ex-diet-food-actions {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-  .ex-diet-my-food-chip {
-    justify-content: space-between;
-  }
+      align-items: flex-start;
+      flex-direction: column;
+    }
+    .ex-diet-my-foods--recent {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .ex-diet-recent-card__head {
+      flex-direction: column;
+      align-items: flex-start;
+    }
+    .ex-diet-my-food-chip {
+      justify-content: space-between;
+    }
   .ex-diet-my-food-main span {
     font-size: 12px;
   }

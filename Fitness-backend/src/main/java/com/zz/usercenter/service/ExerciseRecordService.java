@@ -45,4 +45,9 @@ public interface ExerciseRecordService {
     String getLegacyRecordJson(Long userId, LocalDate recordDate);
 
     boolean hasRecord(Long userId, LocalDate recordDate);
+
+    /**
+     * 获取指定日期的总训练消耗（大卡）
+     */
+    int getDayTotalCaloriesBurned(Long userId, LocalDate recordDate);
 }

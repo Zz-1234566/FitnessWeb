@@ -2,7 +2,7 @@ import { Card, Button } from 'antd';
 import { PlayCircleOutlined, HeartOutlined, HeartFilled, ToolOutlined } from '@ant-design/icons';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import type { IExerciseData, Muscle } from 'react-body-highlighter';
-import { MUSCLE_GROUP_LABELS } from '@/constants/exercise';
+import { MUSCLE_GROUP_LABELS, parseEquipment } from '@/constants/exercise';
 import './ExerciseCard.less';
 
 export interface ExerciseCardProps {
@@ -229,7 +229,7 @@ const ExerciseCard: React.FC<ExerciseCardProps> = ({
 
             <span className="excard-meta-item">
               <ToolOutlined style={{ fontSize: 12 }} />
-              {exercise.equipment}
+              {parseEquipment(exercise.equipment || '').join(' · ') || exercise.equipment}
             </span>
           </div>
 

@@ -36,6 +36,16 @@ public class UserRecord implements Serializable {
      */
     private String weeklySummary;
 
+    /**
+     * 晚间主动提醒内容（AI生成）
+     */
+    private String eveningReminder;
+
+    /**
+     * 早间天气+训练计划提醒（AI生成）
+     */
+    private String morningReminder;
+
     private Date createTime;
 
     private Date updateTime;

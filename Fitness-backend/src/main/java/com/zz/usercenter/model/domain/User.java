@@ -64,46 +64,6 @@ public class User implements Serializable {
     private Integer age;
 
     /**
-     * 活动等级：sedentary/light/moderate/active/very_active
-     */
-    @TableField("activityLevel")
-    private String activityLevel;
-
-    /**
-     * 活动系数
-     */
-    @TableField("activityFactor")
-    private Double activityFactor;
-
-    /**
-     * 日消耗热量(kcal)
-     */
-    @TableField("dailyCalorieBurn")
-    private Double dailyCalorieBurn;
-
-    /**
-     * 用户自定义每日目标热量(kcal)
-     */
-    @TableField("customDailyCalories")
-    private Double customDailyCalories;
-
-    /**
-     * 用户自定义目标体重(kg)
-     */
-    @TableField("targetWeight")
-    private Double targetWeight;
-
-    /**
-     * 健身目标
-     */
-    private String fitnessGoal;
-
-    /**
-     * AI用户画像（性格/职业/训练频率/病史等，由前端画像表单自动生成）
-     */
-    private String userProfile;
-
-    /**
      * 状态: 0 - 正常
      */
     private Integer userStatus;
@@ -142,22 +102,74 @@ public class User implements Serializable {
     /**
      * 用户选择的AI模型
      */
+    /** 用户模型偏好配置（JSON: {current, purificationModel, chatModel, whisperModel, visionModel}） */
     private String modelPreference;
 
-    /**
-     * 训练水平：beginner/intermediate/advanced
-     */
-    private String experienceLevel;
+    /** 用户所在城市（中文，展示用） */
+    private String city;
+
+    /** 用户所在城市（英文，天气API查询用） */
+    private String cityEn;
 
     /**
-     * 可用器械，逗号分隔，如"哑铃,杠铃"
+     * 用户自定义模型配置（JSON数组，apiKey 已 AES 加密）
      */
+    @TableField("customModels")
+    private String customModels;
+
+    // ========== 以下字段来自 UserProfile，仅用于接口返回透传 ==========
+
+    @TableField(exist = false)
+    private String fitnessGoal;
+
+    @TableField(exist = false)
+    private String activityLevel;
+
+    @TableField(exist = false)
+    private Double customDailyCalories;
+
+    @TableField(exist = false)
+    private Double targetWeight;
+
+    @TableField(exist = false)
+    private Double activityFactor;
+
+    @TableField(exist = false)
+    private Double dailyCalorieBurn;
+
+    @TableField(exist = false)
+    private String experienceLevel;
+
+    @TableField(exist = false)
     private String preferredEquipment;
+
+    @TableField(exist = false)
+    private Integer weeklyTrainingDays;
+
+    @TableField(exist = false)
+    private Integer trainingDuration;
+
+    @TableField(exist = false)
+    private String occupation;
+
+    @TableField(exist = false)
+    private String personality;
+
+    @TableField(exist = false)
+    private String medicalHistory;
+
+    @TableField(exist = false)
+    private String dietPreference;
+
+    @TableField(exist = false)
+    private String trainingPreference;
+
+    @TableField(exist = false)
+    private String userProfile;
 
     /**
      * 是否删除
      */
-    //标识该属性是Mybatis的逻辑删除字段
     @TableLogic
     private Integer isDelete;
 

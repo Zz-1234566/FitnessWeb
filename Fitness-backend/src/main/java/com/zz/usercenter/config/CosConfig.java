@@ -19,16 +19,16 @@ import org.springframework.context.annotation.Configuration;
 @Data
 public class CosConfig {
 
-    @Value("${cos.secret-id}")
+    @Value("${cos.secret-id:}")
     private String secretId;
 
-    @Value("${cos.secret-key}")
+    @Value("${cos.secret-key:}")
     private String secretKey;
 
-    @Value("${cos.region}")
+    @Value("${cos.region:ap-guangzhou}")
     private String region;
 
-    @Value("${cos.bucket}")
+    @Value("${cos.bucket:fitness-web}")
     private String bucket;
 
     @Bean

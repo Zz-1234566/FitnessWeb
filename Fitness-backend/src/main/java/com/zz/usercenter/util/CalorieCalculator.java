@@ -1,7 +1,5 @@
 package com.zz.usercenter.util;
 
-import com.zz.usercenter.model.domain.User;
-
 import java.util.Map;
 
 public final class CalorieCalculator {
@@ -24,25 +22,21 @@ public final class CalorieCalculator {
         return ACTIVITY_FACTORS.get(activityLevel);
     }
 
-    public static Double calculateDailyCalorieBurn(User user) {
-        if (user == null
-                || user.getGender() == null
-                || user.getHeight() == null
-                || user.getWeight() == null
-                || user.getAge() == null) {
+    public static Double calculateDailyCalorieBurn(Integer gender, Double height, Double weight, Integer age, Double activityFactor, String activityLevel) {
+        if (gender == null || height == null || weight == null || age == null) {
             return null;
         }
 
-        Double factor = user.getActivityFactor() != null
-                ? user.getActivityFactor()
-                : resolveActivityFactor(user.getActivityLevel());
+        Double factor = activityFactor != null
+                ? activityFactor
+                : resolveActivityFactor(activityLevel);
         if (factor == null) {
             return null;
         }
 
-        double bmr = user.getGender() == 1
-                ? 10 * user.getWeight() + 6.25 * user.getHeight() - 5 * user.getAge() + 5
-                : 10 * user.getWeight() + 6.25 * user.getHeight() - 5 * user.getAge() - 161;
+        double bmr = gender == 1
+                ? 10 * weight + 6.25 * height - 5 * age + 5
+                : 10 * weight + 6.25 * height - 5 * age - 161;
         return Math.round(bmr * factor * 100.0) / 100.0;
     }
 }

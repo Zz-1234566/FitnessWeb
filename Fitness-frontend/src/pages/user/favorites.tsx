@@ -9,6 +9,7 @@ import TrainingTimer from '@/components/TrainingTimer';
 import {
   DIFFICULTY_OPTIONS,
   getEquipmentOptions,
+  parseEquipment,
   MUSCLE_GROUP_COLORS,
   MUSCLE_GROUP_FILTERS,
   MuscleGroup,
@@ -16,7 +17,6 @@ import {
 import { FAVORITES_EMPTY_COPY, FAVORITES_SEARCH_COPY } from '@/constants/favorites';
 import { useExerciseInteractions } from '@/hooks/useExerciseInteractions';
 import { getGreeting } from '@/utils/greeting';
-import TypewriterGreeting, { buildGreetingMessages } from '@/components/TypewriterGreeting';
 import './favorites.less';
 
 const FAVORITES_GREET_LINES = [
@@ -28,26 +28,13 @@ const FAVORITES_GREET_LINES = [
   '先从熟悉的动作开始，身体更容易进入状态。',
 ];
 
-const buildFavoritesGreetingVariants = (greeting: string, username?: string) => {
-  const name = username?.trim() || '朋友';
-  return [
-    `${greeting}，${name}`,
-    `${name}，今天从收藏里挑一个开始`,
-    `${greeting}，这些动作都在等你继续`,
-  ];
-};
-
 const Favorites: React.FC = () => {
   const { initialState } = useModel('@@initialState');
   const currentUser = initialState?.currentUser;
-  const heroMessages = useMemo(
-    () =>
-      buildGreetingMessages(
-        buildFavoritesGreetingVariants(getGreeting(), currentUser?.username),
-        FAVORITES_GREET_LINES,
-      ),
-    [currentUser?.username],
-  );
+  const staticHeroMessage = useMemo(() => ({
+    title: `${getGreeting()}，${currentUser?.username?.trim() || '朋友'}`,
+    sub: FAVORITES_GREET_LINES[0],
+  }), [currentUser?.username]);
   const [selectedGroup, setSelectedGroup] = useState<MuscleGroup>('all');
   const [selectedDifficulty, setSelectedDifficulty] = useState('all');
   const [selectedEquipment, setSelectedEquipment] = useState('all');
@@ -62,7 +49,7 @@ const Favorites: React.FC = () => {
   const fetchFavorites = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await getFavoriteList();
+      const res = await getFavoriteList({ skipErrorHandler: true });
       setExercises(res || []);
     } catch {
       setExercises([]);
@@ -84,7 +71,7 @@ const Favorites: React.FC = () => {
       result = result.filter((e) => e.difficulty === selectedDifficulty);
     }
     if (selectedEquipment !== 'all') {
-      result = result.filter((e) => e.equipment === selectedEquipment);
+      result = result.filter((e) => parseEquipment(e.equipment || '').includes(selectedEquipment));
     }
     if (searchText.trim()) {
       const kw = searchText.trim().toLowerCase();
@@ -173,13 +160,6 @@ const Favorites: React.FC = () => {
     : FAVORITES_EMPTY_COPY.noFavorites;
   return (
     <div className="fav-page">
-      <TypewriterGreeting
-        className="fav-hero-lite"
-        titleClassName="fav-hero-lite-title"
-        subClassName="fav-hero-lite-sub"
-        messages={heroMessages}
-      />
-
       <ExerciseExplorerFilters
         searchValue={searchText}
         searchPlaceholder={FAVORITES_SEARCH_COPY.placeholder}

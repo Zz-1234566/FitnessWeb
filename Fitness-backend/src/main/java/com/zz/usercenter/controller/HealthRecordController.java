@@ -7,6 +7,7 @@ import com.zz.usercenter.common.ResultUtils;
 import com.zz.usercenter.exception.BusincessException;
 import com.zz.usercenter.model.domain.FoodItem;
 import com.zz.usercenter.model.domain.User;
+import com.zz.usercenter.model.domain.UserProfile;
 import com.zz.usercenter.model.domain.UserRecord;
 import com.zz.usercenter.model.domain.request.AddDietRecordRequest;
 import com.zz.usercenter.model.domain.request.AddExerciseRecordRequest;
@@ -48,6 +49,9 @@ public class HealthRecordController {
 
     @Resource
     private ExerciseRecordService exerciseRecordService;
+
+    @Resource
+    private UserProfileService userProfileService;
 
     private static final ObjectMapper objectMapper = new ObjectMapper();
     private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd");
@@ -337,9 +341,9 @@ public class HealthRecordController {
         if (user == null) {
             return null;
         }
-        return user.getCustomDailyCalories() != null
-                ? user.getCustomDailyCalories()
-                : user.getDailyCalorieBurn();
+        UserProfile p = userProfileService.getByUserId(user.getId());
+        if (p == null) return null;
+        return p.getCustomDailyCalories() != null ? p.getCustomDailyCalories() : p.getDailyCalorieBurn();
     }
 
     private int resolveRecordIndex(Map<String, Integer> body) {

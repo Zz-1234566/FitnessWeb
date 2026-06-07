@@ -6,11 +6,6 @@ import lombok.Data;
 import java.io.Serial;
 import java.io.Serializable;
 
-/**
- * 接收前端传回数据的请求体，更新用户信息
- *
- * @author zhouzhou
- */
 @Data
 public class UpdateUserRequest implements Serializable {
 
@@ -30,4 +25,24 @@ public class UpdateUserRequest implements Serializable {
     private String experienceLevel;
     private String preferredEquipment;
     private String userProfile;
+
+    /** 每周训练天数(1-7) */
+    private Integer weeklyTrainingDays;
+    /** 每次训练时长(分钟) */
+    private Integer trainingDuration;
+    /** 职业 */
+    private String occupation;
+    /** 性格特征 */
+    private String personality;
+    /** 伤病/疾病史 */
+    private String medicalHistory;
+    /** 饮食偏好/忌口 */
+    private String dietPreference;
+    /** 训练偏好 */
+    private String trainingPreference;
+
+    /** 所在城市 */
+    private String city;
+    /** 所在城市（英文） */
+    private String cityEn;
 }

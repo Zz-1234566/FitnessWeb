@@ -2,8 +2,11 @@ package com.zz.usercenter.service;
 
 import com.zz.usercenter.model.domain.ChatHistory;
 import com.zz.usercenter.model.domain.User;
+import com.zz.usercenter.model.domain.request.SaveRecognizedFoodRequest;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.io.OutputStream;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
@@ -53,5 +56,13 @@ public interface ChatService {
      * 根据用户信息 + 画像表单数据，调用AI生成用户画像摘要
      */
     String generateUserProfile(User user, String profileFormData);
+
+    Map<String, Object> recognizeFoodImage(Long userId, MultipartFile file, String type);
+
+    Map<String, Object> recognizeImage(Long userId, MultipartFile file, String type, String customText, boolean deepThinking);
+
+    void recognizeSummaryStream(Long userId, String type, String equipmentName, String rawData, boolean deepThinking, OutputStream outputStream);
+
+    boolean saveRecognizedFood(Long userId, SaveRecognizedFoodRequest request);
 
 }

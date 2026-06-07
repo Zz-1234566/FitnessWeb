@@ -1,6 +1,7 @@
 package com.zz.usercenter.controller;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.zz.usercenter.common.BaseResponse;
 import com.zz.usercenter.common.ResultUtils;
 import com.zz.usercenter.constant.UserConstant;
@@ -60,9 +61,12 @@ public class FoodController {
     @GetMapping("/admin/list")
     public BaseResponse<List<FoodItem>> listAllFoods(@RequestParam(value = "keyword", required = false) String keyword,
                                                      HttpServletRequest request) {
-        requireAdmin(request);
+        User user = requireLogin(request);
         LambdaQueryWrapper<FoodItem> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(FoodItem::getIsDelete, 0);
+        if (!isAdmin(user)) {
+            wrapper.eq(FoodItem::getCreatedBy, user.getId());
+        }
         if (StringUtils.isNotBlank(keyword)) {
             wrapper.like(FoodItem::getName, keyword.trim());
         }
@@ -125,8 +129,11 @@ public class FoodController {
             throw new BusincessException(NULL_ERROR, "食物不存在");
         }
         ensureEditable(user, foodItem);
-        foodItem.setIsDelete(1);
-        return ResultUtils.success(foodItemService.updateById(foodItem));
+        LambdaUpdateWrapper<FoodItem> wrapper = new LambdaUpdateWrapper<>();
+        wrapper.eq(FoodItem::getId, foodId)
+                .set(FoodItem::getIsDelete, 1);
+        foodItemService.update(wrapper);
+        return ResultUtils.success(true);
     }
 
     private void fillFoodItem(FoodItem foodItem, SaveFoodItemRequest body) {

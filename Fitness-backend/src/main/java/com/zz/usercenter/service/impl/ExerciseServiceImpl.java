@@ -166,4 +166,16 @@ public class ExerciseServiceImpl extends ServiceImpl<ExerciseMapper, Exercise> i
 
         return result;
     }
+
+    @Override
+    public List<Exercise> searchByEquipment(String equipmentName) {
+        if (equipmentName == null || equipmentName.isBlank()) {
+            return List.of();
+        }
+        QueryWrapper<Exercise> wrapper = new QueryWrapper<>();
+        wrapper.eq("isActive", 1);
+        wrapper.like("equipment", equipmentName);
+        wrapper.last("LIMIT 5");
+        return list(wrapper);
+    }
 }

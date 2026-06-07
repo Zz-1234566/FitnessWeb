@@ -15,10 +15,11 @@
 
 // 公共可直接访问页面路由
   {path: '/welcome', name: '训练导航', icon: 'trophy', component: './welcome'},
-  {path: '/exercises', name: '动作库', icon: 'fire', component: './exercises'},
+  {path: '/muscles', name: '肌肉导航', icon: 'fire', component: './muscles'},
+  {path: '/exercises', name: '动作库', icon: 'read', component: './exercises'},
 
 // 用户页面路由
-  {path: '/user/chat', name: '智能教练', icon: 'smile', component: './user/chat'},
+  {path: '/user/chat', name: 'AI聊天', icon: 'smile', component: './user/chat'},
   {path: '/user/favorites', name: '我的收藏', icon: 'star', component: './user/favorites'},
   {path: '/user/profile', name: '个人中心', icon: 'user', component: './user/profile'},
 
@@ -31,9 +32,11 @@
     component: './Admin',
     routes: [
       {path: '/admin/user-manage', name: '用户管理', component: './Admin/UserManage'},
-      {path: '/admin/food-manage', name: '食物管理', component: './Admin/FoodManage'},
     ],
   },
+
+  // 食物管理（所有用户可访问，后端按角色过滤数据）
+  {path: '/user/food-manage', name: '食物管理', icon: 'shop', component: './Admin/FoodManage'},
 
   // 全局 404（layout: false 不走 onPageChange，不会被误跳转到登录页）
   {path: '*', layout: false, component: './404'},

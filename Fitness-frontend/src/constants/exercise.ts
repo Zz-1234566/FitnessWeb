@@ -50,10 +50,31 @@ export const GROUP_TARGET_MUSCLES: Record<string, string[]> = {
   core: ['腹直肌', '腹外斜肌', '腹内斜肌', '腹横肌'],
 };
 
-export const EQUIPMENT_ORDER = ['自重', '哑铃', '杠铃', '弹力带', '绳索', '器械', '壶铃', 'TRX', '瑜伽垫'];
+export const EQUIPMENT_ORDER = ['无器械', '哑铃', '杠铃', '弹力带', '绳索', '壶铃', 'TRX', '瑜伽垫',
+  '平凳', '上斜凳', '下斜凳', '坐姿凳', '卧推架', '推胸机', '蝴蝶机',
+  '划船机', '高位下拉器', '龙门架', '深蹲架', '史密斯机',
+  '腿举机', '倒蹬机', '腿屈伸机', '腿弯举机', '哈克深蹲机',
+  '提踵机', '侧平举机', '推肩机', '臂屈伸机', '弯举机', '下压机',
+  '卷腹机', '牧师椅', '髋外展机', '罗马椅',
+  '单杠', '双杠', 'T杠', 'V把',
+  '战绳架', '战绳', '药球', '跳绳'];
+
+/** 解析 equipment 字段（JSON 数组或旧格式字符串） */
+export const parseEquipment = (equipment: string): string[] => {
+  if (!equipment) return [];
+  const trimmed = equipment.trim();
+  try {
+    const parsed = JSON.parse(trimmed);
+    if (Array.isArray(parsed)) return parsed.filter(Boolean);
+  } catch {
+    // 旧格式兼容：单个字符串
+  }
+  return trimmed ? [trimmed] : [];
+};
 
 export const getEquipmentOptions = (list: API.Exercise[]): ExerciseFilterOption[] => {
-  const unique = Array.from(new Set(list.map((item) => item.equipment?.trim()).filter(Boolean) as string[]));
+  const allEquipment = list.flatMap((item) => parseEquipment(item.equipment || ''));
+  const unique = Array.from(new Set(allEquipment)).filter(Boolean);
   const sorted = unique.sort((a, b) => {
     const ia = EQUIPMENT_ORDER.indexOf(a);
     const ib = EQUIPMENT_ORDER.indexOf(b);

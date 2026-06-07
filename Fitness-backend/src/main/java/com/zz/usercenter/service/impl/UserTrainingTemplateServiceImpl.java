@@ -1,6 +1,7 @@
 package com.zz.usercenter.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -98,8 +99,11 @@ public class UserTrainingTemplateServiceImpl implements UserTrainingTemplateServ
         if (tpl == null) {
             return false;
         }
-        tpl.setIsDelete(1);
-        userTrainingTemplateMapper.updateById(tpl);
+        LambdaUpdateWrapper<UserTrainingTemplate> wrapper = new LambdaUpdateWrapper<>();
+        wrapper.eq(UserTrainingTemplate::getId, templateId)
+                .eq(UserTrainingTemplate::getUserId, userId)
+                .set(UserTrainingTemplate::getIsDelete, 1);
+        userTrainingTemplateMapper.update(null, wrapper);
         deleteItems(templateId);
         return true;
     }

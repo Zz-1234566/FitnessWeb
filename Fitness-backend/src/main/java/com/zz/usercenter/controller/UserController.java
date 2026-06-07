@@ -3,6 +3,7 @@ package com.zz.usercenter.controller;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.zz.usercenter.model.domain.UserProfile;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.wf.captcha.SpecCaptcha;
 import com.zz.usercenter.common.BaseResponse;
@@ -96,6 +97,9 @@ public class UserController {
 
     @Resource
     private ExerciseRecordService exerciseRecordService;
+
+    @Resource
+    private com.zz.usercenter.service.UserProfileService userProfileService;
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
     private static final ZoneId CN_ZONE = ZoneId.of("Asia/Shanghai");
@@ -219,7 +223,16 @@ public class UserController {
         result.put("title", resolveNoticeTitle(noticeType));
         result.put("cards", visibleCards);
         result.put("pushDate", String.valueOf(visibleCards.get(0).get("date")));
-        result.put("pushTime", "08:00");
+        // 根据卡片类型动态决定推送显示时间
+        String pushTime;
+        if ("evening".equals(noticeType) || noticeType.contains("evening")) {
+            pushTime = "19:50";
+        } else if ("morning".equals(noticeType)) {
+            pushTime = "07:50";
+        } else {
+            pushTime = "07:50";
+        }
+        result.put("pushTime", pushTime);
         result.put("unreadCount", unreadCount);
         result.put("hasUnread", unreadCount > 0);
         return ResultUtils.success(result);
@@ -344,8 +357,8 @@ public class UserController {
     public BaseResponse<User> updateUser(@RequestBody UpdateUserRequest updateRequest,
                                          HttpServletRequest request) {
         User currentUser = requireLogin(request);
-        applyHealthProfile(updateRequest, currentUser);
 
+        // 基础信息写 User 表
         User updateUser = new User();
         updateUser.setId(currentUser.getId());
         updateUser.setUsername(updateRequest.getUsername());
@@ -353,28 +366,49 @@ public class UserController {
         updateUser.setHeight(updateRequest.getHeight());
         updateUser.setWeight(updateRequest.getWeight());
         updateUser.setAge(updateRequest.getAge());
-        updateUser.setActivityLevel(currentUser.getActivityLevel());
-        updateUser.setActivityFactor(currentUser.getActivityFactor());
-        updateUser.setDailyCalorieBurn(currentUser.getDailyCalorieBurn());
-        updateUser.setCustomDailyCalories(currentUser.getCustomDailyCalories());
-        updateUser.setTargetWeight(currentUser.getTargetWeight());
-        updateUser.setFitnessGoal(updateRequest.getFitnessGoal());
-        updateUser.setExperienceLevel(updateRequest.getExperienceLevel());
-        updateUser.setPreferredEquipment(updateRequest.getPreferredEquipment());
-        updateUser.setUserProfile(updateRequest.getUserProfile());
+        updateUser.setCity(updateRequest.getCity());
+        updateUser.setCityEn(updateRequest.getCityEn());
         userService.updateById(updateUser);
+        UserProfile dbProfile = userProfileService.getByUserId(currentUser.getId());
+        String resolvedActivityLevel = updateRequest.getActivityLevel() != null ? updateRequest.getActivityLevel()
+                : (dbProfile != null ? dbProfile.getActivityLevel() : null);
+        Double resolvedActivityFactor = CalorieCalculator.resolveActivityFactor(resolvedActivityLevel);
+        Integer gender = updateRequest.getGender() != null ? updateRequest.getGender()
+                : (currentUser.getGender() != null ? currentUser.getGender() : null);
+        Double height = updateRequest.getHeight() != null ? updateRequest.getHeight()
+                : (currentUser.getHeight() != null ? currentUser.getHeight() : null);
+        Double weight = updateRequest.getWeight() != null ? updateRequest.getWeight()
+                : (currentUser.getWeight() != null ? currentUser.getWeight() : null);
+        Integer age = updateRequest.getAge() != null ? updateRequest.getAge()
+                : (currentUser.getAge() != null ? currentUser.getAge() : null);
+
+        UserProfile profile = new UserProfile();
+        profile.setUserId(currentUser.getId());
+        profile.setActivityLevel(resolvedActivityLevel);
+        profile.setActivityFactor(resolvedActivityFactor);
+        profile.setDailyCalorieBurn(CalorieCalculator.calculateDailyCalorieBurn(
+                gender, height, weight, age, resolvedActivityFactor, resolvedActivityLevel));
+        profile.setCustomDailyCalories(updateRequest.getCustomDailyCalories() != null && updateRequest.getCustomDailyCalories() <= 0
+                ? null : (updateRequest.getCustomDailyCalories() != null ? updateRequest.getCustomDailyCalories() : (dbProfile != null ? dbProfile.getCustomDailyCalories() : null)));
+        profile.setTargetWeight(updateRequest.getTargetWeight() != null && updateRequest.getTargetWeight() <= 0
+                ? null : (updateRequest.getTargetWeight() != null ? updateRequest.getTargetWeight() : (dbProfile != null ? dbProfile.getTargetWeight() : null)));
+        profile.setFitnessGoal(updateRequest.getFitnessGoal() != null ? updateRequest.getFitnessGoal() : (dbProfile != null ? dbProfile.getFitnessGoal() : null));
+        profile.setExperienceLevel(updateRequest.getExperienceLevel() != null ? updateRequest.getExperienceLevel() : (dbProfile != null ? dbProfile.getExperienceLevel() : null));
+        profile.setPreferredEquipment(updateRequest.getPreferredEquipment() != null ? updateRequest.getPreferredEquipment() : (dbProfile != null ? dbProfile.getPreferredEquipment() : null));
+        profile.setUserProfileText(updateRequest.getUserProfile() != null ? updateRequest.getUserProfile() : (dbProfile != null ? dbProfile.getUserProfileText() : null));
+        profile.setWeeklyTrainingDays(updateRequest.getWeeklyTrainingDays() != null ? updateRequest.getWeeklyTrainingDays() : (dbProfile != null ? dbProfile.getWeeklyTrainingDays() : null));
+        profile.setTrainingDuration(updateRequest.getTrainingDuration() != null ? updateRequest.getTrainingDuration() : (dbProfile != null ? dbProfile.getTrainingDuration() : null));
+        profile.setOccupation(updateRequest.getOccupation() != null ? updateRequest.getOccupation() : (dbProfile != null ? dbProfile.getOccupation() : null));
+        profile.setPersonality(updateRequest.getPersonality() != null ? updateRequest.getPersonality() : (dbProfile != null ? dbProfile.getPersonality() : null));
+        profile.setMedicalHistory(updateRequest.getMedicalHistory() != null ? updateRequest.getMedicalHistory() : (dbProfile != null ? dbProfile.getMedicalHistory() : null));
+        profile.setDietPreference(updateRequest.getDietPreference() != null ? updateRequest.getDietPreference() : (dbProfile != null ? dbProfile.getDietPreference() : null));
+        profile.setTrainingPreference(updateRequest.getTrainingPreference() != null ? updateRequest.getTrainingPreference() : (dbProfile != null ? dbProfile.getTrainingPreference() : null));
+        userProfileService.saveOrUpdate(currentUser.getId(), profile);
+
         userWeightRecordService.saveOrUpdateTodayWeight(currentUser.getId(), updateRequest.getWeight());
         userDailyMetricService.syncTodayTarget(currentUser);
 
-        currentUser.setUsername(updateRequest.getUsername());
-        currentUser.setFitnessGoal(updateRequest.getFitnessGoal());
-        currentUser.setExperienceLevel(updateRequest.getExperienceLevel());
-        currentUser.setPreferredEquipment(updateRequest.getPreferredEquipment());
-        currentUser.setUserProfile(updateRequest.getUserProfile());
-        currentUser.setCustomDailyCalories(updateUser.getCustomDailyCalories());
-        currentUser.setTargetWeight(updateUser.getTargetWeight());
-
-        return ResultUtils.success(userService.getSafetyUser(currentUser));
+        return ResultUtils.success(userService.getSafetyUser(userService.getById(currentUser.getId())));
     }
 
     @PostMapping("/generate-profile")
@@ -402,8 +436,6 @@ public class UserController {
         if (dbUser == null) {
             throw new BusincessException(NULL_ERROR, "用户不存在");
         }
-        applyHealthProfile(updateRequest, dbUser);
-
         User updateUser = new User();
         updateUser.setId(updateRequest.getId());
         updateUser.setUsername(updateRequest.getUsername());
@@ -411,13 +443,41 @@ public class UserController {
         updateUser.setHeight(updateRequest.getHeight());
         updateUser.setWeight(updateRequest.getWeight());
         updateUser.setAge(updateRequest.getAge());
-        updateUser.setActivityLevel(dbUser.getActivityLevel());
-        updateUser.setActivityFactor(dbUser.getActivityFactor());
-        updateUser.setDailyCalorieBurn(dbUser.getDailyCalorieBurn());
-        updateUser.setCustomDailyCalories(dbUser.getCustomDailyCalories());
-        updateUser.setTargetWeight(dbUser.getTargetWeight());
-        updateUser.setFitnessGoal(updateRequest.getFitnessGoal());
+        updateUser.setCity(updateRequest.getCity());
+        updateUser.setCityEn(updateRequest.getCityEn());
         userService.updateById(updateUser);
+
+        UserProfile dbProfile = userProfileService.getByUserId(dbUser.getId());
+        String resolvedActivityLevel = updateRequest.getActivityLevel() != null ? updateRequest.getActivityLevel()
+                : (dbProfile != null ? dbProfile.getActivityLevel() : null);
+        Integer gender = updateRequest.getGender() != null ? updateRequest.getGender() : dbUser.getGender();
+        Double height = updateRequest.getHeight() != null ? updateRequest.getHeight() : dbUser.getHeight();
+        Double weight = updateRequest.getWeight() != null ? updateRequest.getWeight() : dbUser.getWeight();
+        Integer age = updateRequest.getAge() != null ? updateRequest.getAge() : dbUser.getAge();
+
+        UserProfile profile = new UserProfile();
+        profile.setUserId(dbUser.getId());
+        profile.setActivityLevel(resolvedActivityLevel);
+        profile.setActivityFactor(CalorieCalculator.resolveActivityFactor(resolvedActivityLevel));
+        profile.setDailyCalorieBurn(CalorieCalculator.calculateDailyCalorieBurn(
+                gender, height, weight, age, profile.getActivityFactor(), resolvedActivityLevel));
+        profile.setCustomDailyCalories(updateRequest.getCustomDailyCalories() != null && updateRequest.getCustomDailyCalories() <= 0
+                ? null : (updateRequest.getCustomDailyCalories() != null ? updateRequest.getCustomDailyCalories() : (dbProfile != null ? dbProfile.getCustomDailyCalories() : null)));
+        profile.setTargetWeight(updateRequest.getTargetWeight() != null && updateRequest.getTargetWeight() <= 0
+                ? null : (updateRequest.getTargetWeight() != null ? updateRequest.getTargetWeight() : (dbProfile != null ? dbProfile.getTargetWeight() : null)));
+        profile.setFitnessGoal(updateRequest.getFitnessGoal() != null ? updateRequest.getFitnessGoal() : (dbProfile != null ? dbProfile.getFitnessGoal() : null));
+        profile.setExperienceLevel(updateRequest.getExperienceLevel() != null ? updateRequest.getExperienceLevel() : (dbProfile != null ? dbProfile.getExperienceLevel() : null));
+        profile.setPreferredEquipment(updateRequest.getPreferredEquipment() != null ? updateRequest.getPreferredEquipment() : (dbProfile != null ? dbProfile.getPreferredEquipment() : null));
+        profile.setUserProfileText(updateRequest.getUserProfile() != null ? updateRequest.getUserProfile() : (dbProfile != null ? dbProfile.getUserProfileText() : null));
+        profile.setWeeklyTrainingDays(updateRequest.getWeeklyTrainingDays() != null ? updateRequest.getWeeklyTrainingDays() : (dbProfile != null ? dbProfile.getWeeklyTrainingDays() : null));
+        profile.setTrainingDuration(updateRequest.getTrainingDuration() != null ? updateRequest.getTrainingDuration() : (dbProfile != null ? dbProfile.getTrainingDuration() : null));
+        profile.setOccupation(updateRequest.getOccupation() != null ? updateRequest.getOccupation() : (dbProfile != null ? dbProfile.getOccupation() : null));
+        profile.setPersonality(updateRequest.getPersonality() != null ? updateRequest.getPersonality() : (dbProfile != null ? dbProfile.getPersonality() : null));
+        profile.setMedicalHistory(updateRequest.getMedicalHistory() != null ? updateRequest.getMedicalHistory() : (dbProfile != null ? dbProfile.getMedicalHistory() : null));
+        profile.setDietPreference(updateRequest.getDietPreference() != null ? updateRequest.getDietPreference() : (dbProfile != null ? dbProfile.getDietPreference() : null));
+        profile.setTrainingPreference(updateRequest.getTrainingPreference() != null ? updateRequest.getTrainingPreference() : (dbProfile != null ? dbProfile.getTrainingPreference() : null));
+        userProfileService.saveOrUpdate(dbUser.getId(), profile);
+
         userWeightRecordService.saveOrUpdateTodayWeight(updateRequest.getId(), updateRequest.getWeight());
         userDailyMetricService.syncTodayTarget(dbUser);
 
@@ -457,13 +517,22 @@ public class UserController {
 
         for (LocalDate date = startDate; !date.isAfter(endDate); date = date.plusDays(1)) {
             Double weight = weightMap.get(date);
+            // 未称重的日期沿用前一天的体重
+            if (weight == null) {
+                weight = lastWeight;
+            }
             UserDailyMetric metric = calorieMap.get(date);
             Integer exerciseCal = exerciseCalorieMap.getOrDefault(date, 0);
-            if (weight != null) {
+            if (weightMap.containsKey(date)) {
                 if (firstWeight == null) {
                     firstWeight = weight;
                 }
                 lastWeight = weight;
+            } else if (weight != null) {
+                // 沿用的值也更新 lastWeight，确保后续天能继续沿用
+                if (firstWeight == null) {
+                    firstWeight = weight;
+                }
             }
             if (metric != null && metric.getCalorieBalance() != null) {
                 totalCalorieBalance += metric.getCalorieBalance();
@@ -488,8 +557,9 @@ public class UserController {
                 : (currentUser.getWeight() == null ? null : currentUser.getWeight().doubleValue()));
         result.setWeeklyWeightChange(firstWeight == null || lastWeight == null ? null : Math.round((lastWeight - firstWeight) * 100.0) / 100.0);
         result.setWeeklyCalorieBalance(hasCalorieBalance ? Math.round(totalCalorieBalance * 100.0) / 100.0 : null);
-        result.setDailyCalorieBurn(currentUser.getDailyCalorieBurn());
-        result.setCustomDailyCalories(currentUser.getCustomDailyCalories());
+        UserProfile profile = userProfileService.getByUserId(currentUser.getId());
+        result.setDailyCalorieBurn(profile != null ? profile.getDailyCalorieBurn() : null);
+        result.setCustomDailyCalories(profile != null ? profile.getCustomDailyCalories() : null);
         return ResultUtils.success(result);
     }
 
@@ -662,6 +732,18 @@ public class UserController {
             cards.add(weeklyCard);
         }
         cards.addAll(buildActiveDailyNoticeCards(userRecord, weekStart, effectiveDate, today));
+        // 晚间主动提醒（20:00后显示当天提醒）
+        if (now.isAfter(LocalTime.of(20, 0)) || now.equals(LocalTime.of(20, 0))) {
+            Map<String, Object> eveningCard = buildEveningReminderCard(userRecord, today);
+            if (eveningCard != null) {
+                cards.add(eveningCard);
+            }
+        }
+        // 早间天气+训练计划提醒（当天有效）
+        Map<String, Object> morningCard = buildMorningReminderCard(userRecord, today);
+        if (morningCard != null) {
+            cards.add(morningCard);
+        }
         cards.sort(Comparator.comparing((Map<String, Object> card) -> String.valueOf(card.get("date"))).reversed());
         return cards;
     }
@@ -829,6 +911,38 @@ public class UserController {
         return card;
     }
 
+    private Map<String, Object> buildEveningReminderCard(UserRecord userRecord, LocalDate today) {
+        if (userRecord == null || StringUtils.isBlank(userRecord.getEveningReminder())) {
+            return null;
+        }
+        Map<String, Object> card = buildSummaryCard(
+                "evening-" + today.format(DATE_FMT),
+                "evening",
+                DISPLAY_DATE_FMT.format(today) + " 晚间提醒",
+                "Evening",
+                buildPreview(userRecord.getEveningReminder()),
+                userRecord.getEveningReminder()
+        );
+        card.put("date", today.format(DATE_FMT));
+        return card;
+    }
+
+    private Map<String, Object> buildMorningReminderCard(UserRecord userRecord, LocalDate today) {
+        if (userRecord == null || StringUtils.isBlank(userRecord.getMorningReminder())) {
+            return null;
+        }
+        Map<String, Object> card = buildSummaryCard(
+                "morning-" + today.format(DATE_FMT),
+                "morning",
+                DISPLAY_DATE_FMT.format(today) + " 早间提醒",
+                "Morning",
+                buildPreview(userRecord.getMorningReminder()),
+                userRecord.getMorningReminder()
+        );
+        card.put("date", today.format(DATE_FMT));
+        return card;
+    }
+
     private String buildNoticeId(String type, List<Map<String, Object>> cards) {
         if (cards.isEmpty()) {
             return type + "-empty";
@@ -839,13 +953,38 @@ public class UserController {
     private String resolveNoticeType(List<Map<String, Object>> cards) {
         boolean hasDaily = cards.stream().anyMatch(card -> "daily".equals(card.get("type")));
         boolean hasWeekly = cards.stream().anyMatch(card -> "weekly".equals(card.get("type")));
+        boolean hasEvening = cards.stream().anyMatch(card -> "evening".equals(card.get("type")));
+        if (hasDaily && hasWeekly && hasEvening) {
+            return "mixed-evening";
+        }
         if (hasDaily && hasWeekly) {
             return "mixed";
+        }
+        if (hasEvening && hasDaily) {
+            return "daily-evening";
+        }
+        if (hasEvening && hasWeekly) {
+            return "weekly-evening";
+        }
+        if (hasEvening) {
+            return "evening";
         }
         return hasWeekly ? "weekly" : "daily";
     }
 
     private String resolveNoticeTitle(String type) {
+        if ("mixed-evening".equals(type)) {
+            return "总结、日报与晚间提醒";
+        }
+        if ("daily-evening".equals(type)) {
+            return "日报与晚间提醒";
+        }
+        if ("weekly-evening".equals(type)) {
+            return "周总结与晚间提醒";
+        }
+        if ("evening".equals(type)) {
+            return "晚间提醒";
+        }
         if ("mixed".equals(type)) {
             return "上周总结与本周日报";
         }
@@ -883,36 +1022,6 @@ public class UserController {
 
     private String formatDateDisplay(LocalDate date) {
         return DISPLAY_DATE_FMT.format(date) + " " + WEEKDAYS[date.getDayOfWeek().getValue()];
-    }
-
-    private void applyHealthProfile(UpdateUserRequest updateRequest, User targetUser) {
-        if (updateRequest.getGender() != null) {
-            targetUser.setGender(updateRequest.getGender());
-        }
-        if (updateRequest.getHeight() != null) {
-            targetUser.setHeight(updateRequest.getHeight());
-        }
-        if (updateRequest.getWeight() != null) {
-            targetUser.setWeight(updateRequest.getWeight());
-        }
-        if (updateRequest.getAge() != null) {
-            targetUser.setAge(updateRequest.getAge());
-        }
-        if (updateRequest.getActivityLevel() != null) {
-            targetUser.setActivityLevel(updateRequest.getActivityLevel());
-        }
-        if (updateRequest.getCustomDailyCalories() != null) {
-            targetUser.setCustomDailyCalories(updateRequest.getCustomDailyCalories() <= 0
-                    ? null
-                    : updateRequest.getCustomDailyCalories());
-        }
-        if (updateRequest.getTargetWeight() != null) {
-            targetUser.setTargetWeight(updateRequest.getTargetWeight() <= 0
-                    ? null
-                    : updateRequest.getTargetWeight());
-        }
-        targetUser.setActivityFactor(CalorieCalculator.resolveActivityFactor(targetUser.getActivityLevel()));
-        targetUser.setDailyCalorieBurn(CalorieCalculator.calculateDailyCalorieBurn(targetUser));
     }
 
     private String buildPreview(String content) {

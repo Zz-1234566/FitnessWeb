@@ -1,7 +1,7 @@
 import { Avatar, Button, Form, Input, InputNumber, message, Select, Tooltip, Upload } from 'antd';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useModel, history } from '@umijs/max';
-import { updateUserProfile, uploadAvatar, generateUserProfile, getFavoriteList, getTodayRecord, getProgressTrend, addExerciseRecord, addStructuredExerciseRecord, addDietRecord, deleteExerciseRecord, deleteDietRecord, searchFoods, updateDietRecord, updateExerciseRecord, getTodayDietRecords, getTodayExerciseRecords, getExerciseList, getExercisesByGroup } from '@/services/ant-design-pro/api';
+import { updateUserProfile, uploadAvatar, generateUserProfile, getFavoriteList, getProgressTrend, addExerciseRecord, addStructuredExerciseRecord, addDietRecord, deleteExerciseRecord, deleteDietRecord, searchFoods, updateDietRecord, updateExerciseRecord, getTodayDietRecords, getTodayExerciseRecords, getExerciseList, getExercisesByGroup } from '@/services/ant-design-pro/api';
 import {
   UserOutlined,
   EditOutlined,
@@ -18,6 +18,7 @@ import {
   SwapOutlined,
   ThunderboltOutlined,
   ExclamationCircleOutlined,
+  RobotOutlined,
 } from '@ant-design/icons';
 import { MUSCLE_GROUP_LABELS } from '@/constants/exercise';
 import WeightTrendChart from './components/WeightTrendChart';
@@ -25,7 +26,6 @@ import CalorieTrendCalendar from './components/CalorieTrendCalendar';
 import { bmiStatus } from '@/utils/bmi';
 import { getGreeting } from '@/utils/greeting';
 import useBottomSheetGesture from '@/hooks/useBottomSheetGesture';
-import TypewriterGreeting, { buildGreetingMessages } from '@/components/TypewriterGreeting';
 import './profile.less';
 
 const PROFILE_ENCOURAGEMENTS = [
@@ -38,15 +38,6 @@ const PROFILE_ENCOURAGEMENTS = [
   '今天的训练不需要完美，完成就已经有意义。',
   '把注意力放回自己，你正在一点点变得更稳。',
 ];
-
-const buildProfileGreetingVariants = (greeting: string, username?: string) => {
-  const name = username?.trim() || '朋友';
-  return [
-    `${greeting}，${name}`,
-    `${name}，今天也别忘了照顾自己`,
-    `${greeting}，来看看你今天的状态`,
-  ];
-};
 
 const fitnessGoals = [
   { value: 'muscle_gain', label: '增肌' },
@@ -361,14 +352,6 @@ const Profile: React.FC = () => {
     title: `${getGreeting()}，${initialState?.currentUser?.username?.trim() || '朋友'}`,
     sub: PROFILE_ENCOURAGEMENTS[0],
   }), [initialState?.currentUser?.username]);
-  const heroMessages = useMemo(
-    () =>
-      buildGreetingMessages(
-        buildProfileGreetingVariants(getGreeting(), initialState?.currentUser?.username),
-        PROFILE_ENCOURAGEMENTS,
-      ),
-    [initialState?.currentUser?.username],
-  );
   const [profileForm] = Form.useForm();
   const [profileOpen, setProfileOpen] = useState(false);
   const [profileLoading, setProfileLoading] = useState(false);
@@ -377,7 +360,6 @@ const Profile: React.FC = () => {
   const [editForm] = Form.useForm();
   const [trendData, setTrendData] = useState<API.UserProgressTrend | null>(null);
   const [favoriteCount, setFavoriteCount] = useState(0);
-  const [todayRecord, setTodayRecord] = useState<API.UserRecord | null>(null);
   const [recordDetailOpen, setRecordDetailOpen] = useState<'exercise' | 'diet' | null>(null);
   const [todayExerciseLoading, setTodayExerciseLoading] = useState(false);
   const [todayDietLoading, setTodayDietLoading] = useState(false);
@@ -456,7 +438,7 @@ const Profile: React.FC = () => {
 
   const fetchFavoriteCount = useCallback(async () => {
     try {
-      const list = await getFavoriteList();
+      const list = await getFavoriteList({ skipErrorHandler: true });
       setFavoriteCount(list?.length || 0);
     } catch { setFavoriteCount(0); }
   }, []);
@@ -471,10 +453,6 @@ const Profile: React.FC = () => {
   }, []);
 
   const fetchTodayRecords = useCallback(async () => {
-    try {
-      const res = await getTodayRecord({ skipErrorHandler: true });
-      setTodayRecord(res || null);
-    } catch { setTodayRecord(null); }
     await Promise.all([fetchTodayExerciseRecords(), fetchTodayDietRecords()]);
   }, [fetchTodayDietRecords, fetchTodayExerciseRecords]);
 
@@ -512,7 +490,12 @@ const Profile: React.FC = () => {
     }
   }, []);
 
-  useEffect(() => { fetchFavoriteCount(); fetchTodayRecords(); fetchTrend('week'); fetchCalorieTrend('week'); }, [fetchFavoriteCount, fetchTodayRecords, fetchTrend, fetchCalorieTrend]);
+  const silentRefresh = useCallback(async () => {
+    await Promise.all([fetchTodayRecords(), fetchFavoriteCount(), fetchTrend(), fetchCalorieTrend()]);
+    initialState?.fetchUserInfo?.();
+  }, [fetchTodayRecords, fetchFavoriteCount, fetchTrend, fetchCalorieTrend, initialState]);
+
+  useEffect(() => { fetchFavoriteCount(); fetchTodayRecords(); }, [fetchFavoriteCount, fetchTodayRecords]);
 
   useEffect(() => { fetchTrend(weightTab); }, [weightTab, fetchTrend]);
 
@@ -553,6 +536,7 @@ const Profile: React.FC = () => {
 
   const profileSheet = useBottomSheetGesture(profileOpen && isMobileProfile, () => setProfileOpen(false));
   const recordSheet = useBottomSheetGesture(!!recordDetailOpen && isMobileProfile, () => setRecordDetailOpen(null));
+  const editSheet = useBottomSheetGesture(editOpen && isMobileProfile, () => setEditOpen(false));
   const exerciseEditSheet = useBottomSheetGesture(exerciseEditOpen && isMobileProfile, () => {
     setExerciseEditOpen(false);
     if (returnToExerciseRecordSheet) {
@@ -571,6 +555,7 @@ const Profile: React.FC = () => {
   const overlayLocked = (!isMobileProfile && (!!recordDetailOpen || editOpen || exerciseEditOpen || dietEditOpen || !!pendingDelete || profileOpen))
     || profileSheet.mounted
     || recordSheet.mounted
+    || editSheet.mounted
     || exerciseEditSheet.mounted
     || dietEditSheet.mounted;
 
@@ -605,7 +590,7 @@ const Profile: React.FC = () => {
         gender: values.gender ?? user?.gender,
       });
       message.success('资料保存成功！');
-      window.location.reload();
+      await silentRefresh();
     } catch (e: any) {
       message.error(e?.message || '保存失败');
     } finally {
@@ -631,6 +616,13 @@ const Profile: React.FC = () => {
         experienceLevel: values.experienceLevel,
         preferredEquipment: values.preferredEquipment?.join(',') || null,
         userProfile: aiProfile,
+        weeklyTrainingDays: values.weeklyTrainingDays,
+        trainingDuration: values.trainingDuration,
+        occupation: values.occupation,
+        personality: values.personality,
+        medicalHistory: values.medicalHistory,
+        dietPreference: values.dietPreference,
+        trainingPreference: values.additionalNotes,
       };
       await updateUserProfile(data);
       localStorage.setItem(PROFILE_FORM_CACHE_KEY, JSON.stringify(values));
@@ -786,7 +778,7 @@ const Profile: React.FC = () => {
         await deleteDietRecord(index);
       }
       message.success(`${label}已删除`);
-      window.location.reload();
+      silentRefresh();
       return;
     }
     setPendingDelete({ type, index, label });
@@ -804,7 +796,7 @@ const Profile: React.FC = () => {
     }
     setPendingDelete(null);
     message.success(`${label}已删除`);
-    window.location.reload();
+    silentRefresh();
   };
 
   const handleOpenDietEdit = (record: any, index: number) => {
@@ -990,7 +982,7 @@ const Profile: React.FC = () => {
         await updateDietRecord(dietEditingIndex, payload, { skipErrorHandler: true });
         message.success('饮食记录已更新');
       }
-      window.location.reload();
+      silentRefresh();
     } catch (e: any) {
       message.error(e?.message || '更新失败');
     } finally {
@@ -1028,7 +1020,7 @@ const Profile: React.FC = () => {
         await updateExerciseRecord(exerciseEditingIndex, payload, { skipErrorHandler: true });
         message.success('训练记录已更新');
       }
-      window.location.reload();
+      silentRefresh();
     } catch (e: any) {
       message.error(e?.message || '更新失败');
     } finally {
@@ -1040,21 +1032,6 @@ const Profile: React.FC = () => {
     <div className="profile-page">
       <div className="profile-container">
         <div className="profile-content">
-          {/* ===== 区域 A: Hero ===== */}
-          {isMobileProfile ? (
-            <div className="profile-hero">
-              <h1 className="profile-hero-title">{staticHeroMessage.title}</h1>
-              <p className="profile-hero-sub">{staticHeroMessage.sub}</p>
-            </div>
-          ) : (
-            <TypewriterGreeting
-              className="profile-hero"
-              titleClassName="profile-hero-title"
-              subClassName="profile-hero-sub"
-              messages={heroMessages}
-            />
-          )}
-
           {/* ===== 区域 B: 资料卡片 ===== */}
           <div className="profile-banner glass-card">
             <Upload
@@ -1104,6 +1081,8 @@ const Profile: React.FC = () => {
                     activityLevel: user?.activityLevel,
                     customDailyCalories: user?.customDailyCalories,
                     targetWeight: user?.targetWeight,
+                    city: user?.city,
+                    cityEn: user?.cityEn,
                   });
                   setEditOpen(true);
                 }} />
@@ -1191,6 +1170,11 @@ const Profile: React.FC = () => {
                       当前目标：{user.targetWeight}kg，{user.weight > user.targetWeight ? '还需减掉' : '还需增重'}{Math.abs(user.weight - user.targetWeight).toFixed(1)}kg，加油！
                     </div>
                   )}
+                  {user?.city && (
+                    <div className="today-record-motivation">
+                      📍 {user.city}
+                    </div>
+                  )}
                 </div>
               </div>
             );
@@ -1225,9 +1209,8 @@ const Profile: React.FC = () => {
                 </div>
               </div>
               <div className="ai-card-right">
-                <div className="ai-card-section-title">
-                  AI 画像
-                  <EditOutlined className="ai-profile-edit-icon" onClick={() => {
+                {isMobileProfile ? (
+                  <RobotOutlined className="ai-profile-mobile-edit" onClick={() => {
                     const parsed = parseCachedProfileForm() || parseUserProfile(user?.userProfile || '');
                     profileForm.setFieldsValue({
                       experienceLevel: user?.experienceLevel || undefined,
@@ -1236,7 +1219,20 @@ const Profile: React.FC = () => {
                     });
                     setProfileOpen(true);
                   }} />
-                </div>
+                ) : (
+                  <div className="ai-card-section-title">
+                    AI 画像
+                    <EditOutlined className="ai-profile-edit-icon" onClick={() => {
+                      const parsed = parseCachedProfileForm() || parseUserProfile(user?.userProfile || '');
+                      profileForm.setFieldsValue({
+                        experienceLevel: user?.experienceLevel || undefined,
+                        preferredEquipment: splitCsv(user?.preferredEquipment),
+                        ...parsed,
+                      });
+                      setProfileOpen(true);
+                    }} />
+                  </div>
+                )}
                 {user?.userProfile ? (
                   <div className="ai-profile-full">{user.userProfile}</div>
                 ) : (
@@ -1250,7 +1246,7 @@ const Profile: React.FC = () => {
             <div className="profile-trend-head">
               <div>
                 <div className="ai-card-section-title">体重与热量趋势</div>
-                <div className="profile-trend-sub">最近 7 天的真实记录，不补缺失值。</div>
+                <div className="profile-trend-sub">最近 7 天的记录，未称重日沿用前一日体重。</div>
               </div>
             </div>
             <div className="profile-trend-grid">
@@ -1770,6 +1766,12 @@ const Profile: React.FC = () => {
                   <Form.Item name="targetWeight" label="目标体重">
                     <InputNumber placeholder="留空则不展示目标线" min={20} max={300} step={0.1} addonAfter="kg" style={{ width: '100%' }} />
                   </Form.Item>
+                  <Form.Item name="city" label="所在城市">
+                    <Input placeholder="如：广州" maxLength={64} />
+                  </Form.Item>
+                  <Form.Item name="cityEn" label="City (English)">
+                    <Input placeholder="如：Guangzhou" maxLength={64} />
+                  </Form.Item>
                   <Form.Item name="activityLevel" label="活动水平" rules={[{ required: true, message: '请选择活动水平' }]}>
                     <Select placeholder="选择活动水平" options={activityOptions.map(({ value, label, factor }) => ({ value, label: `${label} · x${factor}` }))} />
                   </Form.Item>
@@ -1785,6 +1787,54 @@ const Profile: React.FC = () => {
             <div className="profile-desktop-panel-foot">
               <Button onClick={() => setEditOpen(false)}>取消</Button>
               <Button type="primary" loading={editLoading} onClick={handleEditSave}>
+                保存
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {editSheet.mounted && (
+        <div className="profile-record-sheet" style={editSheet.sheetStyle}>
+          <div className="profile-record-sheet-handle" {...editSheet.dragHandleProps} />
+          <div className="profile-record-sheet-head" {...editSheet.dragHandleProps}>
+            <div className="profile-record-sheet-title">编辑个人信息</div>
+          </div>
+          <div className="profile-record-sheet-body">
+            <Form form={editForm} layout="vertical" requiredMark={false}>
+              <Form.Item name="username" label="用户名" rules={[{ required: true, message: '请输入用户名' }, { max: 20, message: '用户名不超过20个字符' }]}>
+                <Input placeholder="输入用户名" maxLength={20} />
+              </Form.Item>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 16px' }}>
+                <Form.Item name="fitnessGoal" label="健身目标" rules={[{ required: true }]}>
+                  <Select placeholder="选择目标" options={fitnessGoals} />
+                </Form.Item>
+                <Form.Item name="age" label="年龄" rules={[{ required: true }, { type: 'number', min: 10, max: 100 }]}>
+                  <InputNumber placeholder="22" min={10} max={100} addonAfter="岁" style={{ width: '100%' }} />
+                </Form.Item>
+                <Form.Item name="height" label="身高" rules={[{ required: true }, { type: 'number', min: 50, max: 250 }]}>
+                  <InputNumber placeholder="175" min={50} max={250} step={0.1} addonAfter="cm" style={{ width: '100%' }} />
+                </Form.Item>
+                <Form.Item name="weight" label="体重" rules={[{ required: true }, { type: 'number', min: 20, max: 300 }]}>
+                  <InputNumber placeholder="70" min={20} max={300} step={0.1} addonAfter="kg" style={{ width: '100%' }} />
+                </Form.Item>
+                <Form.Item name="targetWeight" label="目标体重">
+                  <InputNumber placeholder="留空则不展示目标线" min={20} max={300} step={0.1} addonAfter="kg" style={{ width: '100%' }} />
+                </Form.Item>
+                <Form.Item name="activityLevel" label="活动水平" rules={[{ required: true, message: '请选择活动水平' }]}>
+                  <Select placeholder="选择活动水平" options={activityOptions.map(({ value, label, factor }) => ({ value, label: `${label} · x${factor}` }))} />
+                </Form.Item>
+                <Form.Item name="customDailyCalories" label="每日目标热量">
+                  <InputNumber placeholder="留空则使用系统预估" min={0} max={10000} addonAfter="kcal" style={{ width: '100%' }} />
+                </Form.Item>
+              </div>
+              <Form.Item name="gender" label="性别" rules={[{ required: true }]}>
+                <GenderButtons />
+              </Form.Item>
+            </Form>
+            <div style={{ padding: '12px 0', display: 'flex', gap: 12 }}>
+              <Button block onClick={() => editSheet.requestClose()}>取消</Button>
+              <Button block type="primary" loading={editLoading} onClick={() => { void handleEditSave(); }}>
                 保存
               </Button>
             </div>

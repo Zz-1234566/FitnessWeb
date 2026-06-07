@@ -4,14 +4,20 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.zz.usercenter.mapper.ExerciseMapper;
 import com.zz.usercenter.mapper.ExerciseSessionItemMapper;
 import com.zz.usercenter.mapper.ExerciseSessionMapper;
+import com.zz.usercenter.mapper.UserMapper;
+import com.zz.usercenter.model.domain.Exercise;
 import com.zz.usercenter.model.domain.ExerciseSession;
 import com.zz.usercenter.model.domain.ExerciseSessionItem;
+import com.zz.usercenter.model.domain.User;
 import com.zz.usercenter.model.domain.request.AddExerciseRecordRequest;
 import com.zz.usercenter.service.ExerciseRecordService;
 import jakarta.annotation.Resource;
 import org.apache.commons.lang3.StringUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -28,6 +34,7 @@ import java.util.stream.Collectors;
 @Service
 public class ExerciseRecordServiceImpl implements ExerciseRecordService {
 
+    private static final Logger log = LoggerFactory.getLogger(ExerciseRecordServiceImpl.class);
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
     private static final DateTimeFormatter TIME_FMT = DateTimeFormatter.ofPattern("HH:mm");
 
@@ -36,6 +43,18 @@ public class ExerciseRecordServiceImpl implements ExerciseRecordService {
 
     @Resource
     private ExerciseSessionItemMapper exerciseSessionItemMapper;
+
+    @Resource
+    private ExerciseMapper exerciseMapper;
+
+    @Resource
+    private UserMapper userMapper;
+
+    @Resource
+    private com.zz.usercenter.common.WebSearchHelper webSearchHelper;
+
+    @Resource
+    private com.zz.usercenter.service.UserWeightRecordService userWeightRecordService;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -71,6 +90,9 @@ public class ExerciseRecordServiceImpl implements ExerciseRecordService {
                                      String note,
                                      String source,
                                      List<Map<String, Object>> items) {
+        if (caloriesBurned == null) {
+            caloriesBurned = calculateTotalCalories(userId, items);
+        }
         ExerciseSession session = new ExerciseSession();
         session.setUserId(userId);
         session.setRecordDate(recordDate);
@@ -97,6 +119,9 @@ public class ExerciseRecordServiceImpl implements ExerciseRecordService {
         ExerciseSession existing = getTodayRecordByIndex(userId, recordDate, index);
         if (existing == null) {
             return false;
+        }
+        if (caloriesBurned == null) {
+            caloriesBurned = calculateTotalCalories(userId, items);
         }
         existing.setDurationSeconds(durationSeconds);
         existing.setCaloriesBurned(caloriesBurned);
@@ -229,6 +254,12 @@ public class ExerciseRecordServiceImpl implements ExerciseRecordService {
         return !listByUserAndDate(userId, recordDate).isEmpty();
     }
 
+    @Override
+    public int getDayTotalCaloriesBurned(Long userId, LocalDate recordDate) {
+        Map<LocalDate, Integer> map = sumCaloriesByUserAndDateRange(userId, recordDate, recordDate);
+        return map.getOrDefault(recordDate, 0);
+    }
+
     private ExerciseSession getTodayRecordByIndex(Long userId, LocalDate recordDate, int index) {
         List<ExerciseSession> sessions = listByUserAndDate(userId, recordDate);
         if (index < 0 || index >= sessions.size()) {
@@ -309,5 +340,93 @@ public class ExerciseRecordServiceImpl implements ExerciseRecordService {
 
     private String toStringValue(Object value) {
         return value == null ? null : String.valueOf(value);
+    }
+
+    /** 单组平均耗时（秒），含举起+放下 */
+    private static final int SET_DURATION_SECONDS = 40;
+
+    /**
+     * 根据动作列表自动计算消耗热量（MET × 体重kg × 时间h）
+     * 优先用 durationSeconds，无时长时用 completedSets × (SET_DURATION + restSeconds) 估算
+     */
+    private Integer calculateTotalCalories(Long userId, List<Map<String, Object>> items) {
+        if (userId == null || items == null || items.isEmpty()) {
+            return null;
+        }
+        // 查用户体重
+        Double userWeight = getUserWeight(userId);
+        if (userWeight == null || userWeight <= 0) {
+            log.info("[MET] 用户体重未知, userId={}, 跳过热量计算", userId);
+            return null;
+        }
+
+        double total = 0;
+        boolean hasCalc = false;
+        for (Map<String, Object> item : items) {
+            String exerciseName = toStringValue(item.get("name"));
+            Long exerciseId = toLong(item.get("exerciseId"));
+            Double metValue = null;
+
+            // 优先从数据库查 MET
+            if (exerciseId != null) {
+                Exercise ex = exerciseMapper.selectById(exerciseId);
+                if (ex != null && ex.getMetValue() != null) {
+                    metValue = ex.getMetValue();
+                }
+            }
+
+            // 数据库无 MET，联网查
+            if (metValue == null && exerciseName != null && !exerciseName.isBlank()) {
+                metValue = webSearchHelper.searchMetValue(exerciseName);
+                if (metValue != null) {
+                    log.info("[MET] 联网查到: exercise={}, MET={}", exerciseName, metValue);
+                }
+            }
+            if (metValue == null) {
+                continue;
+            }
+
+            // 优先取 durationSeconds，无则从 completedSets 估算
+            Integer duration = toInteger(item.get("durationSeconds"));
+            if (duration == null || duration <= 0) {
+                Integer sets = toInteger(item.get("completedSets"));
+                if (sets != null && sets > 0) {
+                    // 有 exerciseId 时取 restSeconds，否则默认60s
+                    int rest = 60;
+                    if (exerciseId != null) {
+                        Exercise ex = exerciseMapper.selectById(exerciseId);
+                        if (ex != null && ex.getRestSeconds() != null) {
+                            rest = ex.getRestSeconds();
+                        }
+                    }
+                    duration = sets * (SET_DURATION_SECONDS + rest);
+                    log.info("[MET] 无时长, 从组数估算: exercise={}, sets={}, rest={}s, estimatedDuration={}s",
+                            exerciseName, sets, rest, duration);
+                }
+            }
+            if (duration == null || duration <= 0) {
+                continue;
+            }
+
+            double calories = metValue * userWeight * (duration / 3600.0);
+            total += calories;
+            hasCalc = true;
+            log.info("[MET] 计算: exercise={}, MET={}, weight={}kg, duration={}s, calories={}",
+                    exerciseName, metValue, userWeight, duration, Math.round(calories));
+        }
+        return hasCalc ? (int) Math.round(total) : null;
+    }
+
+    private Double getUserWeight(Long userId) {
+        // 优先取 User.weight，无则取最近一条体重记录
+        User user = userMapper.selectById(userId);
+        if (user != null && user.getWeight() != null && user.getWeight() > 0) {
+            return user.getWeight();
+        }
+        Double latestWeight = userWeightRecordService.getLatestWeightAtOrBefore(userId, LocalDate.now());
+        if (latestWeight != null && latestWeight > 0) {
+            return latestWeight;
+        }
+        return null;
     }
 }

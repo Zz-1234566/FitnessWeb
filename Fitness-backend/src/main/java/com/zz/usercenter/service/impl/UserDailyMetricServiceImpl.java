@@ -4,7 +4,10 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.zz.usercenter.mapper.UserDailyMetricMapper;
 import com.zz.usercenter.model.domain.User;
 import com.zz.usercenter.model.domain.UserDailyMetric;
+import com.zz.usercenter.model.domain.UserProfile;
 import com.zz.usercenter.service.UserDailyMetricService;
+import com.zz.usercenter.service.UserProfileService;
+import jakarta.annotation.Resource;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
@@ -18,6 +21,9 @@ public class UserDailyMetricServiceImpl extends ServiceImpl<UserDailyMetricMappe
         implements UserDailyMetricService {
 
     private static final ZoneId CN_ZONE = ZoneId.of("Asia/Shanghai");
+
+    @Resource
+    private UserProfileService userProfileService;
 
     @Override
     public void syncDailyCalories(Long userId, LocalDate recordDate, List<Map<String, Object>> dietRecords, Double targetCalories) {
@@ -95,8 +101,9 @@ public class UserDailyMetricServiceImpl extends ServiceImpl<UserDailyMetricMappe
         if (user == null) {
             return null;
         }
-        return user.getCustomDailyCalories() != null
-                ? user.getCustomDailyCalories()
-                : user.getDailyCalorieBurn();
+        UserProfile p = userProfileService.getByUserId(user.getId());
+        if (p == null) return null;
+        if (p.getCustomDailyCalories() != null) return p.getCustomDailyCalories();
+        return p.getDailyCalorieBurn();
     }
 }

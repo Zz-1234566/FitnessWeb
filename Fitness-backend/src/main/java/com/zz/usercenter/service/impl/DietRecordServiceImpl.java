@@ -183,6 +183,26 @@ public class DietRecordServiceImpl implements DietRecordService {
         return !listByUserAndDate(userId, recordDate).isEmpty();
     }
 
+    @Override
+    public Map<String, Object> getDayMacroSummary(Long userId, LocalDate recordDate) {
+        Map<String, Object> summary = new LinkedHashMap<>();
+        double totalCalories = 0, totalProtein = 0, totalCarbs = 0, totalFat = 0, totalFiber = 0;
+        for (DietRecord record : listByUserAndDate(userId, recordDate)) {
+            if (record.getCalories() != null) totalCalories += record.getCalories();
+            if (record.getProtein() != null) totalProtein += record.getProtein().doubleValue();
+            if (record.getCarbs() != null) totalCarbs += record.getCarbs().doubleValue();
+            if (record.getFat() != null) totalFat += record.getFat().doubleValue();
+            if (record.getFiber() != null) totalFiber += record.getFiber().doubleValue();
+        }
+        summary.put("calories", (int) Math.round(totalCalories));
+        summary.put("protein", Math.round(totalProtein * 10) / 10.0);
+        summary.put("carbs", Math.round(totalCarbs * 10) / 10.0);
+        summary.put("fat", Math.round(totalFat * 10) / 10.0);
+        summary.put("fiber", Math.round(totalFiber * 10) / 10.0);
+        summary.put("hasRecord", totalCalories > 0 || totalProtein > 0);
+        return summary;
+    }
+
     private DietRecord getTodayRecordByIndex(Long userId, LocalDate recordDate, int index) {
         List<DietRecord> records = listByUserAndDate(userId, recordDate);
         if (index < 0 || index >= records.size()) {

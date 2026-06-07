@@ -111,7 +111,7 @@ const Auth: React.FC = () => {
   const handleLogin = async (values: API.LoginParams) => {
     setLoading(true);
     try {
-      const user = await login({ ...values });
+      const user = await login({ ...values }, { skipErrorHandler: true });
       if (user?.id > 0) {
         message.success('登录成功！');
         setTimeout(async () => {
