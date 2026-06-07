@@ -1200,17 +1200,12 @@ const ChatPage: React.FC = () => {
                     · {ex.name}<span style={{ color: '#999', marginLeft: 6 }}>({MUSCLE_GROUP_LABELS[ex.muscleGroup] || ex.muscleGroup})</span>
                   </div>
                 ))}
-                {msg.matchedExercises.length > 3 && (
-                  <div style={{ fontSize: 12, color: '#aaa', padding: '2px 0' }}>...等 {msg.matchedExercises.length} 个动作</div>
-                )}
                 {msg.equipmentName && (
                   <a
                     href={`/exercises?equipment=${encodeURIComponent(msg.equipmentName)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
                     style={{ display: 'inline-block', marginTop: 8, fontSize: 12, color: '#164A41', textDecoration: 'none' }}
-                    onClick={(e) => {
-                      e.preventDefault();
-                      history.push(`/exercises?equipment=${encodeURIComponent(msg.equipmentName)}`);
-                    }}
                   >
                     查看全部相关动作 →
                   </a>
@@ -1243,7 +1238,6 @@ const ChatPage: React.FC = () => {
                   >
                     <BilibiliIcon size={18} />
                     <span>B站搜「{msg.equipmentName || '使用教程'}」</span>
-                    <span style={{ marginLeft: 'auto', fontSize: 11, opacity: 0.5 }}>{new URL(msg.bilibiliUrl).hostname}</span>
                   </a>
                 )}
                 {msg.douyinUrl && (
@@ -1270,7 +1264,6 @@ const ChatPage: React.FC = () => {
                   >
                     <DouyinIcon size={18} />
                     <span>抖音搜「{msg.equipmentName || '使用教程'}」</span>
-                    <span style={{ marginLeft: 'auto', fontSize: 11, opacity: 0.4 }}>{new URL(msg.douyinUrl).hostname}</span>
                   </a>
                 )}
               </div>
