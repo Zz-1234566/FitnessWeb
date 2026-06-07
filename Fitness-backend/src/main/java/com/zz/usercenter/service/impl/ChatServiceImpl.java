@@ -4346,6 +4346,23 @@ implements ChatService {
         return cm != null && !cm.isBlank() ? cm.trim() : this.aiModelConfig.getChatModel();
     }
 
+    private AiModelConfig.ModelProvider resolveVisionProvider(Long userId) {
+        try {
+            User user = (User) this.userService.getById(userId);
+            if (user != null) {
+                Map<String, String> prefs = this.parseModelPreference(user);
+                String vm = prefs.get("visionModel");
+                if (vm != null && !vm.isBlank()) {
+                    AiModelConfig.ModelProvider p = this.aiModelConfig.getProvider(vm.trim());
+                    if (p != null) return p;
+                }
+            }
+        } catch (Exception e) {
+            log.warn("[VisionProvider] resolve user preference failed: {}", e.getMessage());
+        }
+        return this.resolveVisionProvider(userId);
+    }
+
     private String resolveActiveModelName() {
         String modelName = ACTIVE_CHAT_MODEL.get();
         return this.isBlank(modelName) ? this.aiModelConfig.getDefaultModel() : modelName.trim();
@@ -4555,7 +4572,7 @@ implements ChatService {
         LinkedHashMap<String, Object> debugTimings = new LinkedHashMap<String, Object>();
         debugTimings.put("traceId", traceId);
         debugTimings.put("requestStartedAtMs", requestStartedAt);
-        AiModelConfig.ModelProvider visionProvider = this.aiModelConfig.getVisionProvider();
+        AiModelConfig.ModelProvider visionProvider = this.resolveVisionProvider(userId);
         if (visionProvider == null) {
             throw new BusincessException(StateCode.AI_ERROR, "\u89c6\u89c9\u6a21\u578b\u672a\u914d\u7f6e");
         }
@@ -4718,7 +4735,7 @@ implements ChatService {
         HashMap<String, Object> result = new HashMap<String, Object>();
         try {
             String imageUrl = this.fileService.uploadFoodImage(file, userId);
-            AiModelConfig.ModelProvider visionProvider = this.aiModelConfig.getVisionProvider();
+            AiModelConfig.ModelProvider visionProvider = this.resolveVisionProvider(userId);
             if (visionProvider == null) {
                 result.put("error", "\u89c6\u89c9\u6a21\u578b\u672a\u914d\u7f6e");
                 return result;
@@ -4872,7 +4889,7 @@ implements ChatService {
             Object aiPrompt;
             String systemPrompt;
             String imageUrl = this.fileService.uploadFoodImage(file, userId);
-            AiModelConfig.ModelProvider visionProvider = this.aiModelConfig.getVisionProvider();
+            AiModelConfig.ModelProvider visionProvider = this.resolveVisionProvider(userId);
             if (visionProvider == null) {
                 throw new BusincessException(StateCode.AI_ERROR, "\u89c6\u89c9\u6a21\u578b\u672a\u914d\u7f6e");
             }
@@ -4945,7 +4962,7 @@ implements ChatService {
         HashMap<String, Object> result = new HashMap<String, Object>();
         try {
             String imageUrl = this.fileService.uploadFoodImage(file, userId);
-            AiModelConfig.ModelProvider visionProvider = this.aiModelConfig.getVisionProvider();
+            AiModelConfig.ModelProvider visionProvider = this.resolveVisionProvider(userId);
             if (visionProvider == null) {
                 throw new BusincessException(StateCode.AI_ERROR, "\u89c6\u89c9\u6a21\u578b\u672a\u914d\u7f6e");
             }
@@ -5002,7 +5019,7 @@ implements ChatService {
         HashMap<String, Object> result = new HashMap<String, Object>();
         try {
             String imageUrl = this.fileService.uploadFoodImage(file, userId);
-            AiModelConfig.ModelProvider visionProvider = this.aiModelConfig.getVisionProvider();
+            AiModelConfig.ModelProvider visionProvider = this.resolveVisionProvider(userId);
             if (visionProvider == null) {
                 throw new BusincessException(StateCode.AI_ERROR, "\u89c6\u89c9\u6a21\u578b\u672a\u914d\u7f6e");
             }
@@ -5032,7 +5049,7 @@ implements ChatService {
         HashMap<String, Object> result = new HashMap<String, Object>();
         try {
             String imageUrl = this.fileService.uploadFoodImage(file, userId);
-            AiModelConfig.ModelProvider visionProvider = this.aiModelConfig.getVisionProvider();
+            AiModelConfig.ModelProvider visionProvider = this.resolveVisionProvider(userId);
             if (visionProvider == null) {
                 throw new BusincessException(StateCode.AI_ERROR, "\u89c6\u89c9\u6a21\u578b\u672a\u914d\u7f6e");
             }
