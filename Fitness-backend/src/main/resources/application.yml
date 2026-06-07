@@ -58,7 +58,7 @@ ai:
   default-model: qwen3.6-plus
   purification-model: deepseek-v4-flash
   chat-model: qwen3.6-plus
-  vision-model: glm-4v-flash
+  vision-model: glm-4v-plus
   deep-thinking: false
   recognition-timeout: 60
   max-tokens: 2048
@@ -88,6 +88,18 @@ ai:
       api-key: ${GLM_API_KEY}
       model: glm-4v-flash
       label: ZhiPu GLM-4V Flash (Vision)
+      type: vision
+    - name: glm-4v-plus
+      base-url: https://open.bigmodel.cn/api/paas/v4
+      api-key: ${GLM_API_KEY}
+      model: glm-4v-plus
+      label: ZhiPu GLM-4V Plus (Vision)
+      type: vision
+    - name: qwen2.5-vl
+      base-url: https://dashscope.aliyuncs.com/compatible-mode/v1
+      api-key: ${QWEN_API_KEY}
+      model: qwen2.5-vl-72b-instruct
+      label: Qwen 2.5 VL 72B (Vision)
       type: vision
   whisper:
     model: qwen3-asr-flash

@@ -83,7 +83,12 @@ import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletRequest;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
+import java.io.ByteArrayOutputStream;
 import java.io.OutputStream;
+import java.awt.Graphics2D;
+import java.awt.image.BufferedImage;
+import javax.imageio.ImageIO;
+import java.util.Base64;
 import java.lang.invoke.CallSite;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -4679,6 +4684,35 @@ implements ChatService {
         return this.recognizeImagePrepare(userId, file, type, customText);
     }
 
+    /**
+     * 图片预处理：缩放到最长边1024px + 轻微增强对比度，返回base64 data URI
+     */
+    private String preprocessImageToDataUri(byte[] imageBytes, String contentType) {
+        try {
+            java.io.ByteArrayInputStream bais = new java.io.ByteArrayInputStream(imageBytes);
+            BufferedImage img = ImageIO.read(bais);
+            if (img == null) return null;
+            int w = img.getWidth(), h = img.getHeight();
+            int maxDim = 1024;
+            if (w > maxDim || h > maxDim) {
+                double scale = (double) maxDim / Math.max(w, h);
+                int nw = (int)(w * scale), nh = (int)(h * scale);
+                BufferedImage resized = new BufferedImage(nw, nh, BufferedImage.TYPE_INT_RGB);
+                Graphics2D g = resized.createGraphics();
+                g.drawImage(img, 0, 0, nw, nh, null);
+                g.dispose();
+                img = resized;
+            }
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            ImageIO.write(img, "jpg", baos);
+            String base64 = Base64.getEncoder().encodeToString(baos.toByteArray());
+            return "data:image/jpeg;base64," + base64;
+        } catch (Exception e) {
+            log.warn("[ImagePreprocess] failed: {}", e.getMessage());
+            return null;
+        }
+    }
+
     private Map<String, Object> recognizeImagePrepare(Long userId, MultipartFile file, String type, String customText) {
         long start = System.currentTimeMillis();
         HashMap<String, Object> result = new HashMap<String, Object>();
@@ -4697,7 +4731,16 @@ implements ChatService {
             };
             ArrayList<Map<String, Object>> parts = new ArrayList<Map<String, Object>>();
             parts.add(Map.of("type", "text", "text", visionPrompt));
-            parts.add(Map.of("type", "image_url", "image_url", Map.of("url", imageUrl)));
+            // 图片预处理：缩放+增强，用base64 data URI发给视觉模型（COS URL仅用于前端展示）
+                    String visionImageUrl = imageUrl;
+                    try {
+                        byte[] imgBytes = file.getBytes();
+                        String dataUri = this.preprocessImageToDataUri(imgBytes, file.getContentType());
+                        if (dataUri != null) visionImageUrl = dataUri;
+                    } catch (Exception e) {
+                        log.warn("[RecognizePrepare] preprocess failed, fallback to COS URL: {}", e.getMessage());
+                    }
+                    parts.add(Map.of("type", "image_url", "image_url", Map.of("url", visionImageUrl)));
             Map<String, Object> visionRes = this.aiCallHelper.callVision(visionProvider, parts, 512, 0.0);
             String visionText = this.extractVisionText(visionRes);
             log.info("[RecognizePrepare] userId={}, type={}, visionResult={}, elapsed={}ms", new Object[]{userId, type, visionText, System.currentTimeMillis() - start});
