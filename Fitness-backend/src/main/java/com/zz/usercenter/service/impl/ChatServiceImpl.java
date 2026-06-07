@@ -4872,6 +4872,10 @@ implements ChatService {
             result.put("textReply", reply);
             result.put("equipmentName", equipmentName);
             result.put("imageUrl", imageUrl);
+            // 生成B站和抖音搜索链接（固定URL格式，无需联网）
+            String encodedName = java.net.URLEncoder.encode(equipmentName + " 使用教程", java.nio.charset.StandardCharsets.UTF_8);
+            result.put("bilibiliUrl", "https://search.bilibili.com/all?keyword=" + encodedName);
+            result.put("douyinUrl", "https://www.douyin.com/search/" + encodedName);
         }
         catch (Exception e) {
             log.error("\u5668\u68b0\u8bc6\u522b\u5931\u8d25", (Throwable)e);
