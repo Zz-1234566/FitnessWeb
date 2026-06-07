@@ -155,35 +155,48 @@ public class WeatherHelper {
             sb.append("\n");
         }
 
-        // 第二段：天气评估标签（硬阈值判定，AI不可自行解读）
+        // 第二段：天气评估标签（硬阈值判定，综合温度+湿度+降水+风）
+        // 注意：体感由温度和湿度联合决定，阴天不代表凉爽，南方高温高湿环境下体感可能很差
         sb.append("  天气评估：");
         DailyWeather today = forecast.get(0);
         List<String> labels = new ArrayList<>();
 
+        // 温度标签
         if (today.tempMax >= 35) {
             labels.add("酷热");
         } else if (today.tempMax >= 30) {
             labels.add("炎热");
         } else if (today.tempMax >= 25) {
             labels.add("温暖");
+        } else if (today.tempMax >= 15) {
+            labels.add("凉爽");
+        } else if (today.tempMax <= 0) {
+            labels.add("严寒");
         } else if (today.tempMax <= 10) {
             labels.add("寒冷");
         }
 
-        if (today.humidity >= 80 && today.tempMax >= 26) {
+        // 湿热/闷热标签（联合温度+湿度，南方常见：阴天但高温高湿体感差）
+        if (today.humidity >= 85 && today.tempMax >= 24) {
+            labels.add("湿热难耐");
+        } else if (today.humidity >= 75 && today.tempMax >= 26) {
             labels.add("湿热");
-        } else if (today.humidity >= 70 && today.tempMax >= 28) {
+        } else if (today.humidity >= 60 && today.tempMax >= 28) {
             labels.add("闷热");
-        } else if (today.humidity >= 85) {
+        } else if (today.humidity >= 65 && today.tempMax >= 26) {
+            labels.add("闷热");
+        } else if (today.humidity >= 80) {
             labels.add("潮湿");
         }
 
+        // 降水标签
         if (today.pop >= 80) {
             labels.add("有雨");
         } else if (today.pop >= 50) {
             labels.add("可能有雨");
         }
 
+        // 风标签
         if (today.windSpeed > 40) {
             labels.add("大风");
         }
@@ -193,14 +206,17 @@ public class WeatherHelper {
         }
         sb.append(String.join("、", labels)).append("\n");
 
-        // 第三段：运动建议（硬阈值，独立于天气描述文本）
+        // 第三段：运动建议（硬阈值，综合温度+湿度+降水+风，不单看天气描述文字）
         sb.append("  运动建议：");
         if (today.tempMax >= 35 || (today.tempMax >= 30 && today.humidity >= 75)) {
             sb.append("高温，建议室内训练，注意补水和防暑");
         } else if (today.tempMax >= 30) {
             sb.append("天气热，建议室内训练或清晨傍晚运动，注意补水");
-        } else if (today.tempMax >= 25 && today.humidity >= 80) {
-            sb.append("潮湿闷热，体感温度偏高，建议室内训练或清晨傍晚运动");
+        } else if (today.humidity >= 70 && today.tempMax >= 26) {
+            // 覆盖南方常见场景：阴天但高温高湿，体感闷热不适
+            sb.append("体感闷热（虽然可能没有阳光直射，但湿度大体感温度偏高），建议室内训练或清晨傍晚运动，注意补水");
+        } else if (today.tempMax >= 25 && today.humidity >= 60) {
+            sb.append("温热潮湿，建议室内训练或选择通风良好的场地");
         } else if (today.pop >= 80) {
             sb.append("有雨，建议室内训练");
         } else if (today.pop >= 50) {
@@ -209,7 +225,7 @@ public class WeatherHelper {
             sb.append("寒冷，建议室内训练，注意保暖");
         } else if (today.windSpeed > 40) {
             sb.append("大风，建议室内训练");
-        } else if (today.tempMax >= 20 && today.tempMax < 30 && today.humidity < 70) {
+        } else if (today.tempMax >= 18 && today.tempMax <= 28 && today.humidity < 65) {
             sb.append("天气舒适，适合户外运动");
         } else {
             sb.append("适合运动");
