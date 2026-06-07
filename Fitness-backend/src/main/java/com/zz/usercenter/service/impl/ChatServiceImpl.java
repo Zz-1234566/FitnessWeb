@@ -4773,9 +4773,31 @@ implements ChatService {
                     result.put("textReply", "未识别到健身器械");
                     return result;
                 }
-                String rawSearch = this.webSearchHelper.searchEquipmentInfo(visionText);
+                // AI可能返回"蝴蝶机/夹胸机"，按/或／拆分，取第一个作为主名称
+                String[] nameParts = visionText.split("[/／]");
+                String primaryName = nameParts[0].trim();
+                if (primaryName.isBlank()) {
+                    primaryName = visionText;
+                }
+                if (nameParts.length > 1) {
+                    log.info("[RecognizePrepare] userId={}, 器械名拆分: '{}' -> '{}'", userId, visionText, primaryName);
+                }
+                result.put("equipmentName", primaryName);
+                // 联网搜索资料
+                String rawSearch = this.webSearchHelper.searchEquipmentInfo(primaryName);
                 result.put("rawData", rawSearch);
-                log.info("[RecognizePrepare] userId={}, searchDone={}, elapsed={}ms", new Object[]{userId, rawSearch != null, System.currentTimeMillis() - start});
+                // B站和抖音搜索链接
+                String encodedName = java.net.URLEncoder.encode(primaryName + " 使用教程", java.nio.charset.StandardCharsets.UTF_8);
+                result.put("bilibiliUrl", "https://search.bilibili.com/all?keyword=" + encodedName);
+                result.put("douyinUrl", "https://www.douyin.com/search/" + encodedName);
+                // 匹配动作库中用到该器械的动作
+                List<Exercise> matchedExercises = this.exerciseService.searchByEquipment(primaryName);
+                if (matchedExercises != null && !matchedExercises.isEmpty()) {
+                    result.put("matchedExercises", matchedExercises.stream()
+                        .map(e -> Map.of("name", e.getName(), "muscleGroup", e.getMuscleGroup() != null ? e.getMuscleGroup() : ""))
+                        .toList());
+                }
+                log.info("[RecognizePrepare] userId={}, searchDone={}, matched={}, elapsed={}ms", new Object[]{userId, rawSearch != null, matchedExercises != null ? matchedExercises.size() : 0, System.currentTimeMillis() - start});
             }
         }
         catch (Exception e) {
