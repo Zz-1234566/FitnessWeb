@@ -720,7 +720,6 @@ const Exercises: React.FC = () => {
   }, [exercises, searchText, selectedDifficulty, selectedEquipment]);
   const hasActiveExerciseFilter = selectedGroup !== 'all'
     || selectedDifficulty !== 'all'
-    || selectedEquipment !== 'all'
     || !!searchText.trim();
 
   const visibleExercises = useMemo(

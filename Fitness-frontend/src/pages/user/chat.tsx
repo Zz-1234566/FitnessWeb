@@ -1243,7 +1243,7 @@ const ChatPage: React.FC = () => {
                   >
                     <BilibiliIcon size={18} />
                     <span>B站搜「{msg.equipmentName || '使用教程'}」</span>
-                    <span style={{ marginLeft: 'auto', fontSize: 11, opacity: 0.5 }}>{new URL(msg.bilibiliUrl).hostname}</span>
+                    <span style={{ marginLeft: 'auto', fontSize: 11, opacity: 0.5 }}>www.bilibili.com</span>
                   </a>
                 )}
                 {msg.douyinUrl && (
