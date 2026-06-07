@@ -4708,6 +4708,11 @@ implements ChatService {
             result.put("imageUrl", imageUrl);
             result.put("equipmentName", visionText);
             if ("equipment".equals(type)) {
+                // 视觉模型判断为非健身器械，直接返回不搜索
+                if ("非健身器械".equals(visionText)) {
+                    result.put("textReply", "未识别到健身器械");
+                    return result;
+                }
                 String rawSearch = this.webSearchHelper.searchEquipmentInfo(visionText);
                 result.put("rawData", rawSearch);
                 log.info("[RecognizePrepare] userId={}, searchDone={}, elapsed={}ms", new Object[]{userId, rawSearch != null, System.currentTimeMillis() - start});
