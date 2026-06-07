@@ -1847,33 +1847,60 @@ implements ChatService {
         return sb.toString().trim();
     }
 
+    /**
+     * 构建当日营养摄入汇总（Markdown表格格式，供记录饮食后展示）
+     * 包含热量、蛋白质、碳水、脂肪、纤维的已摄入/目标/差值
+     */
     private String buildMacroSummaryText(Long userId, LocalDate date) {
         Map<String, Object> macro = this.dietRecordService.getDayMacroSummary(userId, date);
         boolean hasRecord = Boolean.TRUE.equals(macro.get("hasRecord"));
         if (!hasRecord) {
             return "";
         }
-        int calories = (Integer)macro.get("calories");
-        double protein = (Double)macro.get("protein");
-        double carbs = (Double)macro.get("carbs");
-        double fat = (Double)macro.get("fat");
-        StringBuilder sb = new StringBuilder();
-        sb.append(String.format("今日已摄入：热量%dkcal，蛋白质%.0fg，碳水%.0fg，脂肪%.0fg", calories, protein, carbs, fat));
-        try {
-            UserProfile profile = this.userProfileService.getByUserId(userId);
-            if (profile != null) {
-                double target = 0.0;
-                double d = profile.getCustomDailyCalories() != null && profile.getCustomDailyCalories() > 0.0 ? profile.getCustomDailyCalories() : (target = profile.getDailyCalorieBurn() != null ? profile.getDailyCalorieBurn() : 0.0);
-                if (target > 0.0) {
-                    int remaining = (int)Math.round(target - (double)calories);
-                    sb.append(String.format("（目标%.0fkcal，%s%.0fkcal）", target, remaining >= 0 ? "还差" : "超出", Math.abs(remaining)));
-                }
-            }
+        int calories = (Integer) macro.get("calories");
+        double protein = (Double) macro.get("protein");
+        double carbs = (Double) macro.get("carbs");
+        double fat = (Double) macro.get("fat");
+        double fiber = macro.get("fiber") != null ? ((Number) macro.get("fiber")).doubleValue() : 0.0;
+
+        // 计算目标营养素（蛋白质30%、碳水40%、脂肪30%）
+        Double targetCal = this.resolveTargetCalories(this.userService.getById(userId));
+        if (targetCal != null && targetCal > 0) {
+            int targetProtein = (int) Math.round(targetCal * 0.30 / 4);
+            int targetCarbs = (int) Math.round(targetCal * 0.40 / 4);
+            int targetFat = (int) Math.round(targetCal * 0.30 / 9);
+            int remainCal = (int) Math.round(targetCal - calories);
+            int remainProtein = (int) Math.round(targetProtein - protein);
+            int remainCarbs = (int) Math.round(targetCarbs - carbs);
+            int remainFat = (int) Math.round(targetFat - fat);
+
+            return String.format(
+                "\n| 营养素 | 已摄入 | 目标 | 差值 |\n" +
+                "|--------|--------|------|------|\n" +
+                "| 热量 | %dkcal | %.0fkcal | %s%dkcal |\n" +
+                "| 蛋白质 | %.0fg | %dg | %s%dg |\n" +
+                "| 碳水 | %.0fg | %dg | %s%dg |\n" +
+                "| 脂肪 | %.0fg | %dg | %s%dg |\n" +
+                "| 纤维 | %.0fg | — | — |",
+                calories, targetCal, remainCal >= 0 ? "" : "+", Math.abs(remainCal),
+                protein, targetProtein, remainProtein >= 0 ? "" : "+", Math.abs(remainProtein),
+                carbs, targetCarbs, remainCarbs >= 0 ? "" : "+", Math.abs(remainCarbs),
+                fat, targetFat, remainFat >= 0 ? "" : "+", Math.abs(remainFat),
+                fiber
+            );
         }
-        catch (Exception exception) {
-            // empty catch block
-        }
-        return sb.toString();
+
+        // 无目标热量时只显示已摄入
+        return String.format(
+            "\n| 营养素 | 已摄入 |\n" +
+            "|--------|--------|\n" +
+            "| 热量 | %dkcal |\n" +
+            "| 蛋白质 | %.0fg |\n" +
+            "| 碳水 | %.0fg |\n" +
+            "| 脂肪 | %.0fg |\n" +
+            "| 纤维 | %.0fg |",
+            calories, protein, carbs, fat, fiber
+        );
     }
 
     private String buildWeekRecordReply(User user, UserRecord userRecord) {
