@@ -14,6 +14,8 @@ import {
   getEquipmentOptions,
   parseEquipment,
   type MuscleGroup,
+  normalizeExerciseDifficulty,
+  normalizeExerciseMuscleGroup,
 } from '@/constants/exercise';
 import useEnsureCurrentUser from '@/hooks/useEnsureCurrentUser';
 import { useExerciseInteractions } from '@/hooks/useExerciseInteractions';
@@ -233,41 +235,6 @@ const PLAN_SECTION_LABELS: Record<PlanTrainingDraft['sectionType'], string> = {
   warmup: '热身',
   main: '正式训练',
   stretch: '拉伸',
-};
-
-const normalizeExerciseDifficulty = (value?: string) => {
-  const text = (value || '').trim().toLowerCase();
-  if (!text) return '';
-  if (text === '初级' || text === 'easy' || text === 'beginner') return '初级';
-  if (text === '中级' || text === 'medium' || text === 'intermediate') return '中级';
-  if (text === '高级' || text === 'hard' || text === 'advanced') return '高级';
-  return (value || '').trim();
-};
-
-const normalizeExerciseMuscleGroup = (value?: string): MuscleGroup | '' => {
-  const text = (value || '').trim().toLowerCase();
-  switch (text) {
-    case 'chest':
-    case '胸部':
-      return 'chest';
-    case 'back':
-    case '背部':
-      return 'back';
-    case 'shoulders':
-    case '肩部':
-      return 'shoulders';
-    case 'arms':
-    case '手臂':
-      return 'arms';
-    case 'legs':
-    case '腿部':
-      return 'legs';
-    case 'core':
-    case '核心':
-      return 'core';
-    default:
-      return '';
-  }
 };
 
 const generateNextName = (
@@ -717,7 +684,7 @@ const Exercises: React.FC = () => {
       );
     }
     return result;
-  }, [exercises, searchText, selectedDifficulty, selectedEquipment]);
+  }, [exercises, searchText, selectedDifficulty, selectedEquipment, selectedGroup]);
   const hasActiveExerciseFilter = selectedGroup !== 'all'
     || selectedDifficulty !== 'all'
     || !!searchText.trim();

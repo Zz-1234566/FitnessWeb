@@ -10,6 +10,8 @@ import {
   DIFFICULTY_OPTIONS,
   getEquipmentOptions,
   parseEquipment,
+  normalizeExerciseDifficulty,
+  normalizeExerciseMuscleGroup,
   MUSCLE_GROUP_COLORS,
   MUSCLE_GROUP_FILTERS,
   MuscleGroup,
@@ -65,10 +67,10 @@ const Favorites: React.FC = () => {
   const filteredExercises = useMemo(() => {
     let result = exercises;
     if (selectedGroup !== 'all') {
-      result = result.filter((e) => e.muscleGroup === selectedGroup);
+      result = result.filter((e) => normalizeExerciseMuscleGroup(e.muscleGroup) === selectedGroup);
     }
     if (selectedDifficulty !== 'all') {
-      result = result.filter((e) => e.difficulty === selectedDifficulty);
+      result = result.filter((e) => normalizeExerciseDifficulty(e.difficulty) === selectedDifficulty);
     }
     if (selectedEquipment !== 'all') {
       result = result.filter((e) => parseEquipment(e.equipment || '').includes(selectedEquipment));
