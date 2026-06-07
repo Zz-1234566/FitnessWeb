@@ -543,6 +543,7 @@ implements ChatService {
             String content;
             boolean hasRecentMessages;
             AiModelConfig.ModelProvider provider = this.requireProvider(this.resolveChatModel(user));
+            log.info("【意图分类】userId={}, model={}, message={}", userId, provider.getModel(), message);
             WebClient webClient = this.getWebClient(provider);
             StringBuilder userMsg = new StringBuilder();
             String summary = history != null ? history.getSummary() : null;
@@ -655,6 +656,7 @@ implements ChatService {
             Map auditResult;
             String content;
             AiModelConfig.ModelProvider provider = this.requireProvider(this.resolvePurificationModel(user));
+            log.info("【参数审计】intent={}, model={}", intent, provider.getModel());
             WebClient webClient = this.getWebClient(provider);
             String paramsJson = JSON_MAPPER.writeValueAsString(params);
             String prompt = String.format(AUDIT_CHECK_PROMPT, message, paramsJson, intent, extractableParams);
@@ -793,6 +795,7 @@ implements ChatService {
 
     private ToolCallResult handleSaveDietIntent(Long userId, UserRecord userRecord, Map<String, Object> intentMap) {
         try {
+            log.info("【记录饮食】userId={}, intentMap={}", userId, intentMap);
             String food = this.sanitizeDietRecordText(this.toCleanString(intentMap.get("food")));
             if (food == null || food.isBlank()) {
                 return null;
@@ -1853,8 +1856,10 @@ implements ChatService {
      */
     private String buildMacroSummaryText(Long userId, LocalDate date) {
         Map<String, Object> macro = this.dietRecordService.getDayMacroSummary(userId, date);
+        log.info("[MacroSummary] userId={}, date={}, macro={}", userId, date, macro);
         boolean hasRecord = Boolean.TRUE.equals(macro.get("hasRecord"));
         if (!hasRecord) {
+            log.info("[MacroSummary] hasRecord=false, skip table");
             return "";
         }
         int calories = (Integer) macro.get("calories");
@@ -1930,6 +1935,7 @@ implements ChatService {
     private String callAiText(String systemPrompt, String userMessage, int maxTokens, double temperature) {
         try {
             AiModelConfig.ModelProvider provider = this.requireActiveProvider();
+            log.info("【AI调用-callAiText】model={}, maxTokens={}", provider.getModel(), maxTokens);
             WebClient webClient = this.getWebClient(provider);
             HashMap<String, Object> requestBody = new HashMap<String, Object>();
             requestBody.put("model", provider.getModel());
@@ -1957,6 +1963,7 @@ implements ChatService {
     private String callAiSingle(String userMessage, int maxTokens, double temperature) {
         try {
             AiModelConfig.ModelProvider provider = this.requireActiveProvider();
+            log.info("【AI调用-callAiSingle】model={}, maxTokens={}", provider.getModel(), maxTokens);
             WebClient webClient = this.getWebClient(provider);
             HashMap<String, Object> requestBody = new HashMap<String, Object>();
             requestBody.put("model", provider.getModel());
@@ -2273,6 +2280,7 @@ implements ChatService {
             String historyContext = recentUserMsgs.length() > 0 ? "【近期对话记录（用户消息）】\n" + String.valueOf(recentUserMsgs) + "\n" : "";
             String prompt = "training_plan".equals(planIntent) ? "根据用户消息、近期对话和用户信息，提取训练计划的器械筛选条件。\n\n" + historyContext + "用户信息：" + userInfo + "\n\n用户消息：" + userMessage + "\n\n请严格按以下JSON格式返回，不要输出任何其他内容：\n{\"equipment\": \"器械条件\"}\n\nequipment填写规则：\n1. 如果用户明确说徒手/无器械/自重训练，填 \"徒手\"\n2. 如果用户说只有某种器械（如只有哑铃、只有弹力带），填该器械名称（逗号分隔）\n3. 如果用户说不能使用某种器械（如没有杠铃、去不了健身房），从用户画像器械中排除不可用的，填剩余可用器械\n4. 如果用户没提到器械限制，填 \"null\"（直接填null三个字母），将使用用户画像中的器械设置\n5. 注意用户画像中的训练水平（新手/中级/高级），筛选时要配合其水平\n6. 不要自己编造器械，只根据用户消息和用户信息推断" : "根据用户消息、近期对话和用户信息，提取饮食计划的食物筛选条件。\n\n" + historyContext + "用户信息：" + userInfo + "\n\n用户消息：" + userMessage + "\n\n请严格按以下JSON格式返回，不要输出任何其他内容：\n{\"foodCategory\": \"分类条件\"}\n\nfoodCategory填写规则：\n1. 如果用户说不会做饭/不想做饭/只能吃即食，填 \"即食\"\n2. 如果用户提到饮食偏好（如减脂、低碳水、高蛋白），填对应的食物分类偏好\n3. 如果用户没提到饮食限制，填 \"null\"（直接填null三个字母）\n4. 只根据用户消息推断，不要自己编造";
             AiModelConfig.ModelProvider provider = this.requireProvider(this.resolvePurificationModel(user));
+            log.info("【计划筛选提取】planIntent={}, model={}", planIntent, provider.getModel());
             HashMap<String, Object> requestBody = new HashMap<String, Object>();
             requestBody.put("model", provider.getModel());
             requestBody.put("max_tokens", 200);
@@ -2644,6 +2652,7 @@ implements ChatService {
     }
 
     private String callAiApiStreamWithProvider(String systemPrompt, String userMessage, OutputStream outputStream, AiModelConfig.ModelProvider provider, int maxTokens) throws Exception {
+        log.info("【AI调用】model={}, baseUrl={}, maxTokens={}", provider.getModel(), provider.getBaseUrl(), maxTokens);
         ObjectMapper objectMapper = new ObjectMapper();
         long startedAt = System.currentTimeMillis();
         HashMap<String, Object> requestBody = new HashMap<String, Object>();
