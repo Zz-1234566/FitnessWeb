@@ -4319,12 +4319,12 @@ implements ChatService {
 
     private String resolveUserModelName(User user) {
         if (user == null || this.isBlank(user.getModelPreference())) {
-            return this.aiModelConfig.getDefaultModel();
+            return this.aiModelConfig.getConversationModel();
         }
         try {
             Map prefs = (Map)JSON_MAPPER.readValue(user.getModelPreference(), (TypeReference)new TypeReference<Map<String, String>>(){});
             String current = (String)prefs.get("current");
-            return current != null && !current.isBlank() ? current.trim() : this.aiModelConfig.getDefaultModel();
+            return current != null && !current.isBlank() ? current.trim() : this.aiModelConfig.getConversationModel();
         }
         catch (Exception e) {
             return user.getModelPreference().trim();
@@ -4371,12 +4371,12 @@ implements ChatService {
         } catch (Exception e) {
             log.warn("[VisionProvider] resolve user preference failed: {}", e.getMessage());
         }
-        return this.resolveVisionProvider(userId);
+        return this.aiModelConfig.getVisionProvider();
     }
 
     private String resolveActiveModelName() {
         String modelName = ACTIVE_CHAT_MODEL.get();
-        return this.isBlank(modelName) ? this.aiModelConfig.getDefaultModel() : modelName.trim();
+        return this.isBlank(modelName) ? this.aiModelConfig.getConversationModel() : modelName.trim();
     }
 
     private AiModelConfig.ModelProvider requireActiveProvider() {

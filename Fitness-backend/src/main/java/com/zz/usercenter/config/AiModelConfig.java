@@ -13,6 +13,9 @@ public class AiModelConfig {
 
     private String defaultModel;
 
+    /** 用户对话模型（默认聊天用的模型，非聪明模型） */
+    private String conversationModel;
+
     /** 文本提纯/清洗用的模型 */
     private String purificationModel;
 
