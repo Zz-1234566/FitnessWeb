@@ -1200,9 +1200,6 @@ const ChatPage: React.FC = () => {
                     · {ex.name}<span style={{ color: '#999', marginLeft: 6 }}>({MUSCLE_GROUP_LABELS[ex.muscleGroup] || ex.muscleGroup})</span>
                   </div>
                 ))}
-                {msg.matchedExercises.length > 3 && (
-                  <div style={{ fontSize: 12, color: '#aaa', padding: '2px 0' }}>...等 {msg.matchedExercises.length} 个动作</div>
-                )}
                 {msg.equipmentName && (
                   <a
                     href={`/exercises?equipment=${encodeURIComponent(msg.equipmentName)}`}
