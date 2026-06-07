@@ -22,7 +22,7 @@ public interface ChatService {
      * @param resultHolder
      * @param replyTypeHolder 工具调用后设置的 replyType，供 Controller 直接使用
      */
-    void sendMessageStream(Long userId, String message, OutputStream outputStream, StringBuilder resultHolder, AtomicReference<String> replyTypeHolder);
+    void sendMessageStream(Long userId, String message, OutputStream outputStream, StringBuilder resultHolder, AtomicReference<String> replyTypeHolder, boolean deepThinking);
 
     /**
      * 获取用户的对话记录

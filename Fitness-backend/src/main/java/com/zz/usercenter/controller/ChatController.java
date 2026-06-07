@@ -121,7 +121,7 @@ public class ChatController {
 
             try {
                 chatService.sendMessageStream(currentUser.getId(), chatRequest.getMessage(),
-                        outputStream, resultHolder, replyTypeRef);
+                        outputStream, resultHolder, replyTypeRef, chatRequest.isDeepThinking());
             } finally {
                 com.zz.usercenter.service.impl.ChatServiceImpl.clearClientIp();
             }

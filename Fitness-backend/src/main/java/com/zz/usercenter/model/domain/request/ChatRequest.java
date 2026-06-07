@@ -19,4 +19,9 @@ public class ChatRequest implements Serializable {
      * 用户消息
      */
     private String message;
+
+    /**
+     * 是否开启深度思索（true=聪明模型，false=聊天模型）
+     */
+    private boolean deepThinking = false;
 }

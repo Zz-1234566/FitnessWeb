@@ -195,6 +195,7 @@ implements ChatService {
     private static final List<String> PLAN_MUSCLE_GROUP_ORDER = List.of("chest", "back", "shoulders", "arms", "legs", "core");
     private static final BigDecimal KJ_TO_KCAL_DIVISOR = new BigDecimal("4.184");
     private static final ThreadLocal<String> ACTIVE_CHAT_MODEL = new ThreadLocal();
+    private static final ThreadLocal<Boolean> DEEP_THINKING = new ThreadLocal();
     private static final ThreadLocal<Map<String, WebClient>> CACHED_WEB_CLIENTS = ThreadLocal.withInitial(HashMap::new);
     private static final ThreadLocal<String> CACHED_TRAINING_PLAN_TEXT = new ThreadLocal();
     private static final ThreadLocal<List<Map<String, String>>> ACTIVE_CUSTOM_MODELS = new ThreadLocal();
@@ -231,7 +232,7 @@ implements ChatService {
      * WARNING - Removed try catching itself - possible behaviour change.
      */
     @Override
-    public void sendMessageStream(Long userId, String message, OutputStream outputStream, StringBuilder resultHolder, AtomicReference<String> replyTypeHolder) {
+    public void sendMessageStream(Long userId, String message, OutputStream outputStream, StringBuilder resultHolder, AtomicReference<String> replyTypeHolder, boolean deepThinking) {
         long t0 = System.currentTimeMillis();
         this.clientDisconnected = false;
         this.trySaveUserCity(userId);
@@ -249,6 +250,7 @@ implements ChatService {
             UserProfile userProfile = this.userProfileService.getByUserId(userId);
             ACTIVE_CHAT_MODEL.set(this.resolveUserModelName(user));
             ACTIVE_CUSTOM_MODELS.set(this.loadCustomModelsFromRedis(userId));
+            DEEP_THINKING.set(deepThinking);
             ChatHistory history = this.getChatHistory(userId);
             UserRecord userRecord = this.userRecordService.getByUserId(userId);
             long t1 = System.currentTimeMillis();
@@ -399,6 +401,7 @@ implements ChatService {
         }
         finally {
             ACTIVE_CHAT_MODEL.remove();
+            DEEP_THINKING.remove();
             CACHED_WEB_CLIENTS.remove();
             CACHED_TRAINING_PLAN_TEXT.remove();
             ACTIVE_CUSTOM_MODELS.remove();
@@ -514,7 +517,7 @@ implements ChatService {
 
     private String streamSummarizeWithToolData(Long userId, User user, String userMessage, String toolData, String systemPrompt, OutputStream outputStream, StringBuilder resultHolder) {
         try {
-            AiModelConfig.ModelProvider provider = this.requireProvider(this.resolvePurificationModel(user));
+            AiModelConfig.ModelProvider provider = this.resolveReplyProvider(user);
             String userContent = "用户问：" + userMessage + "\n\n工具返回数据：\n" + toolData;
             String summarized = this.callAiApiStreamWithProvider(systemPrompt, userContent, outputStream, provider, 1024);
             resultHolder.append(summarized);
@@ -1107,7 +1110,8 @@ implements ChatService {
             String exerciseCatalog = this.buildExerciseCatalog(userId, null);
             context.append("【动作库】\n").append(exerciseCatalog).append("\n\n");
             context.append("用户的具体要求：").append(message);
-            String aiReply = this.callAiApiStream(REPORT_TRAINING_ISSUE_PROMPT, context.toString(), outputStream, null, 1500);
+            AiModelConfig.ModelProvider trainingReplyProvider = this.resolveReplyProvider(user);
+            String aiReply = this.callAiApiStreamWithProvider(REPORT_TRAINING_ISSUE_PROMPT, context.toString(), outputStream, trainingReplyProvider, 1500);
             if (!this.isBlank(aiReply)) {
                 resultHolder.append(aiReply);
             }
@@ -1150,7 +1154,8 @@ implements ChatService {
             String foodCatalog = this.buildFoodCatalog(userId, null);
             context.append("【食物营养参考】\n").append(foodCatalog).append("\n\n");
             context.append("用户的具体要求：").append(message);
-            String aiReply = this.callAiApiStream(REPORT_DIET_ISSUE_PROMPT, context.toString(), outputStream, null, 1500);
+            AiModelConfig.ModelProvider dietReplyProvider = this.resolveReplyProvider(user);
+            String aiReply = this.callAiApiStreamWithProvider(REPORT_DIET_ISSUE_PROMPT, context.toString(), outputStream, dietReplyProvider, 1500);
             if (!this.isBlank(aiReply)) {
                 resultHolder.append(aiReply);
             }
@@ -1168,7 +1173,8 @@ implements ChatService {
             String systemPrompt = "你是健身助手Tatan。用户在询问天气情况，请结合天气给出运动建议。如果天气恶劣建议室内训练，天气好可以鼓励户外运动。回复简洁友好，100字以内。";
             Object userMsg = message;
             userMsg = weatherContext != null ? (String)userMsg + "\n\n" + weatherContext : (String)userMsg + "\n\n（天气数据获取失败，请根据常识回答）";
-            String reply = this.callAiApiStream(systemPrompt, (String)userMsg, outputStream, null, 256);
+            AiModelConfig.ModelProvider provider = this.resolveReplyProvider(user);
+            String reply = this.callAiApiStreamWithProvider(systemPrompt, (String)userMsg, outputStream, provider, 256);
             return new ToolCallResult("query_weather", "");
         }
         catch (Exception e) {
@@ -1498,7 +1504,7 @@ implements ChatService {
             String msgLower = message.toLowerCase();
             boolean hasFitnessKeyword = msgLower.contains("练") || msgLower.contains("吃") || msgLower.contains("记录") || msgLower.contains("计划") || msgLower.contains("食谱") || msgLower.contains("运动") || msgLower.contains("饮食") || msgLower.contains("体重") || msgLower.contains("热量") || msgLower.contains("卡路里") || msgLower.contains("打卡") || msgLower.contains("训练") || msgLower.contains("减脂") || msgLower.contains("增肌") || msgLower.contains("蛋白") || msgLower.contains("碳水") || msgLower.contains("脂肪");
             String knowledgeResult = hasFitnessKeyword ? this.retrieveKnowledgeDirectly(message) : null;
-            AiModelConfig.ModelProvider provider = this.requireActiveProvider();
+            AiModelConfig.ModelProvider provider = this.resolveReplyProvider(user);
             PromptContextDecision ctx = new PromptContextDecision(false, true, false, false, false, true, false, false);
             Object contextMsg = this.buildContextAwareUserMessage(message, history, userRecord, user, null, ctx);
             if (purifiedText != null && !purifiedText.isBlank()) {
@@ -2307,7 +2313,14 @@ implements ChatService {
                 targetNutrients = "（用户未设置目标热量，按2000kcal估算）目标热量: 2000kcal, 目标蛋白质: 150g, 目标碳水: 200g, 目标脂肪: 67g";
             }
             String prompt = DIET_PLAN_GEN_PROMPT.replace("{userInfo}", userInfo).replace("{foodKnowledge}", foodKnowledge != null ? foodKnowledge : "无").replace("{mealRequestInstruction}", mealRequestInstruction).replace("{targetNutrients}", targetNutrients);
-            String aiReply = this.callAiApiStream(prompt, (String)contextAwareMessage, outputStream, null, 900);
+            AiModelConfig.ModelProvider replyProvider = this.resolveReplyProvider(user);
+            String aiReply;
+            try {
+                aiReply = this.callAiApiStreamWithProvider(prompt, (String)contextAwareMessage, outputStream, replyProvider, 900);
+            } catch (Exception e) {
+                log.error("[饮食计划生成] AI调用失败", e);
+                aiReply = null;
+            }
             return this.sanitizeDietPlanOutput(aiReply, this.resolveMealType(msg));
         }
         if ("training_plan".equals(planIntent)) {
@@ -2322,7 +2335,14 @@ implements ChatService {
                 existingPlan = "\n【用户当前已有的训练计划（用户反馈时在此基础上调整）】\n" + trainingPlanText2 + "\n";
             }
             String prompt = TRAINING_PLAN_GEN_PROMPT.replace("{userInfo}", userInfo).replace("{exerciseCatalog}", exerciseCatalog).replace("{existingPlan}", (CharSequence)existingPlan);
-            String aiReply = this.callAiApiStream(prompt, (String)contextAwareMessage, outputStream, null, 1200);
+            AiModelConfig.ModelProvider replyProvider2 = this.resolveReplyProvider(user);
+            String aiReply;
+            try {
+                aiReply = this.callAiApiStreamWithProvider(prompt, (String)contextAwareMessage, outputStream, replyProvider2, 1200);
+            } catch (Exception e) {
+                log.error("[训练计划生成] AI调用失败", e);
+                aiReply = null;
+            }
             return this.sanitizeTrainingPlanOutput(aiReply, this.shouldForceDefaultTrainingWeek(msg));
         }
         return null;
@@ -4383,6 +4403,18 @@ implements ChatService {
         return this.requireProvider(this.resolveActiveModelName());
     }
 
+    /**
+     * 统一最终回复模型选择：深度思索开→聪明模型，关→聊天模型
+     */
+    private AiModelConfig.ModelProvider resolveReplyProvider(User user) {
+        Boolean deep = DEEP_THINKING.get();
+        if (deep != null && deep) {
+            String chatModel = this.resolveChatModel(user);
+            return this.requireProvider(chatModel);
+        }
+        return this.requireProvider(this.resolveActiveModelName());
+    }
+
     private AiModelConfig.ModelProvider requireProvider(String modelName) {
         AiModelConfig.ModelProvider provider = this.aiModelConfig.getProvider(modelName);
         if (provider != null) {
@@ -4828,8 +4860,7 @@ implements ChatService {
             String aiPrompt;
             String systemPrompt;
             User user = (User)this.userService.getById(userId);
-            String userChatModel = user != null ? this.resolveChatModel(user) : this.aiModelConfig.getChatModel();
-            AiModelConfig.ModelProvider summaryProvider = this.aiModelConfig.getByModelName(userChatModel, true);
+            AiModelConfig.ModelProvider summaryProvider = this.resolveReplyProvider(user);
             if ("equipment".equals(type)) {
                 if (deepThinking) {
                     systemPrompt = "你是健身助手Tatan，拥有10年经验的专业健身教练，擅长运动解剖学和训练科学指导。";

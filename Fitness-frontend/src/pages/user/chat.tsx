@@ -1058,7 +1058,7 @@ const ChatPage: React.FC = () => {
 
     try {
       await sendChatMessageStream(
-        { message: text },
+        { message: text, deepThinking },
         (chunk) => {
           patchAiMessage(aiMessageId, (msg) => {
             const base = isFirstChunk ? '' : msg.content;

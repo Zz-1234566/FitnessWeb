@@ -55,7 +55,7 @@ export type ChatStreamMeta = {
  *  普通正文事件使用 data:内容\n\n，完成后可能追加 event:meta 结构化元数据。
  */
 export async function sendChatMessageStream(
-  body: { message: string },
+  body: { message: string; deepThinking?: boolean },
   onChunk: (text: string) => void,
   onDone: (fullText: string) => void,
   onError: (err: Error) => void,
