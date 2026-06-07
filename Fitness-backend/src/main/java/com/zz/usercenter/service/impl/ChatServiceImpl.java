@@ -4540,16 +4540,24 @@ implements ChatService {
     }
 
     private AiModelConfig.ModelProvider requireProvider(String modelName) {
+        // 1. 从系统 providers 中查找
         AiModelConfig.ModelProvider provider = this.aiModelConfig.getProvider(modelName);
         if (provider != null) {
             return provider;
         }
+        // 2. 从用户自定义模型中查找
         List<Map<String, String>> customModels = ACTIVE_CUSTOM_MODELS.get();
         if (customModels != null) {
             for (Map<String, String> cm : customModels) {
                 if (!modelName.equals(cm.get("name"))) continue;
                 return this.aiModelConfig.getCustomProvider(cm.get("name"), cm.get("baseUrl"), cm.get("apiKey"), cm.get("model"));
             }
+        }
+        // 3. 容错：模型不存在时回退到默认模型（避免用户保存的旧偏好失效导致全链路崩溃）
+        AiModelConfig.ModelProvider fallback = this.aiModelConfig.getProvider(this.aiModelConfig.getDefaultModel());
+        if (fallback != null) {
+            log.warn("【模型容错】模型'{}'不存在，回退到默认模型'{}'", modelName, fallback.getModel());
+            return fallback;
         }
         throw new BusincessException(StateCode.AI_ERROR, "当前AI模型不存在，请切换别的AI试一试");
     }
