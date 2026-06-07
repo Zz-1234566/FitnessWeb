@@ -61,4 +61,13 @@ public interface DietRecordService {
      * 获取指定日期的宏量营养素汇总
      */
     Map<String, Object> getDayMacroSummary(Long userId, LocalDate recordDate);
+
+    /** 获取指定记录的最大 sortOrder */
+    int getMaxSortOrder(Long dietRecordId);
+
+    /** 追加 items 到已有记录 */
+    void appendItems(Long dietRecordId, List<Map<String, Object>> items);
+
+    /** 更新记录 */
+    boolean updateRecord(DietRecord record);
 }

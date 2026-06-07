@@ -3574,6 +3574,9 @@ implements ChatService {
         return null;
     }
 
+    /**
+     * 保存饮食记录：同一天同一餐次已有记录时追加食物，否则新建
+     */
     private void appendDietRecord(Long userId, UserRecord cachedUserRecord, AddDietRecordRequest body) {
         try {
             List<DietFoodItemRequest> matchedItems;
@@ -3588,11 +3591,24 @@ implements ChatService {
             if (!(body.getItems() != null && !body.getItems().isEmpty() || this.isBlank(body.getName()) || (matchedItems = this.tryMatchDietItemsForRecord(userId, body.getName())).isEmpty())) {
                 body.setItems(matchedItems);
             }
+
+            // 查找当天同餐次是否已有记录
+            DietRecord existingRecord = this.findExistingMealRecord(userId, recordDate, resolvedMealType);
+
             if (body.getItems() != null && !body.getItems().isEmpty()) {
-                MealNutrition nutrition = this.resolveMealNutrition(body.getItems(), userId);
-                this.dietRecordService.saveStructuredRecord(userId, recordDate, recordTime, resolvedMealType, nutrition.summaryName(), nutrition.calories().intValue(), nutrition.protein(), nutrition.carbs(), nutrition.fat(), nutrition.fiber(), body.getNote(), this.isBlank(body.getSource()) ? "chat" : body.getSource(), nutrition.items());
-                body.setName(nutrition.summaryName());
-                body.setCalories(nutrition.calories().intValue());
+                MealNutrition newNutrition = this.resolveMealNutrition(body.getItems(), userId);
+
+                if (existingRecord != null) {
+                    // 追加：合并已有记录 + 新食物
+                    this.mergeIntoExistingRecord(existingRecord, newNutrition, body);
+                    body.setName(newNutrition.summaryName());
+                    body.setCalories(newNutrition.calories().intValue());
+                } else {
+                    // 新建
+                    this.dietRecordService.saveStructuredRecord(userId, recordDate, recordTime, resolvedMealType, newNutrition.summaryName(), newNutrition.calories().intValue(), newNutrition.protein(), newNutrition.carbs(), newNutrition.fat(), newNutrition.fiber(), body.getNote(), this.isBlank(body.getSource()) ? "chat" : body.getSource(), newNutrition.items());
+                    body.setName(newNutrition.summaryName());
+                    body.setCalories(newNutrition.calories().intValue());
+                }
             } else {
                 this.dietRecordService.saveSimpleRecord(userId, recordDate, recordTime, resolvedMealType, body.getName().trim(), body.getCalories(), body.getNote(), this.isBlank(body.getSource()) ? "chat" : body.getSource());
             }
@@ -3602,6 +3618,51 @@ implements ChatService {
         catch (Exception e) {
             log.error("保存饮食记录失败", (Throwable)e);
         }
+    }
+
+    /**
+     * 查找当天同餐次的已有记录
+     */
+    private DietRecord findExistingMealRecord(Long userId, LocalDate recordDate, String mealType) {
+        if (mealType == null || mealType.isBlank()) return null;
+        List<DietRecord> records = this.dietRecordService.listByUserAndDate(userId, recordDate);
+        return records.stream()
+                .filter(r -> mealType.equals(r.getMealType()))
+                .findFirst()
+                .orElse(null);
+    }
+
+    /**
+     * 将新食物追加到已有记录：合并名称、累加营养素、追加items
+     */
+    private void mergeIntoExistingRecord(DietRecord existing, MealNutrition newNutrition, AddDietRecordRequest body) {
+        // 合并名称
+        String mergedName = existing.getName() + "、" + newNutrition.summaryName();
+        // 累加营养素
+        int mergedCal = (existing.getCalories() != null ? existing.getCalories() : 0) + newNutrition.calories().intValue();
+        BigDecimal mergedProtein = (existing.getProtein() != null ? existing.getProtein() : BigDecimal.ZERO).add(newNutrition.protein());
+        BigDecimal mergedCarbs = (existing.getCarbs() != null ? existing.getCarbs() : BigDecimal.ZERO).add(newNutrition.carbs());
+        BigDecimal mergedFat = (existing.getFat() != null ? existing.getFat() : BigDecimal.ZERO).add(newNutrition.fat());
+        BigDecimal mergedFiber = (existing.getFiber() != null ? existing.getFiber() : BigDecimal.ZERO).add(newNutrition.fiber());
+
+        // 更新主记录
+        existing.setName(mergedName);
+        existing.setCalories(mergedCal);
+        existing.setProtein(mergedProtein);
+        existing.setCarbs(mergedCarbs);
+        existing.setFat(mergedFat);
+        existing.setFiber(mergedFiber);
+        this.dietRecordService.updateRecord(existing);
+
+        // 追加新的 items（设置 dietRecordId 和 sortOrder）
+        int nextSort = this.dietRecordService.getMaxSortOrder(existing.getId()) + 1;
+        for (Map<String, Object> item : newNutrition.items()) {
+            item.put("dietRecordId", existing.getId());
+            item.put("sortOrder", nextSort++);
+        }
+        this.dietRecordService.appendItems(existing.getId(), newNutrition.items());
+
+        log.info("【追加饮食】recordId={}, mergedName={}, cal={}", existing.getId(), mergedName, mergedCal);
     }
 
     private MealNutrition resolveMealNutrition(List<DietFoodItemRequest> requests, Long userId) {
@@ -3632,6 +3693,11 @@ implements ChatService {
                 throw new BusincessException(StateCode.PARAMS_ERROR, "摄入量必须大于0");
             }
             BigDecimal baseAmount = this.defaultIfZero(foodItem.getBaseAmount());
+            // 非重量单位（个/片/根等）：amount是数量，实际克数=数量×基准量
+            String requestUnit = request.getUnit();
+            if (requestUnit != null && Set.of("个", "片", "根", "袋", "份", "只", "枚", "串", "盒", "瓶", "听", "罐").contains(requestUnit)) {
+                amount = amount.multiply(baseAmount);
+            }
             BigDecimal ratio = amount.divide(baseAmount, 4, RoundingMode.HALF_UP);
             BigDecimal itemCalories = this.multiply(this.kjToKcal(foodItem.getCalories()), ratio);
             BigDecimal itemProtein = this.multiply(foodItem.getProtein(), ratio);
@@ -4150,13 +4216,14 @@ implements ChatService {
         String normalizedLine = rawDescription.replace("以及", "+").replace("还有", "+").replace("并且", "+").replace("然后", "+").replace("再加", "+").replace("搭配", "+").replace("配", "+").replace("和", "+").replace("、", "+").replace("，", "+").replace(",", "+");
         log.info("【食物匹配】rawDescription={}, normalizedLine={}", rawDescription, normalizedLine);
         for (ParsedFoodAmount parsed : this.parseDietFoodLine(normalizedLine)) {
-            log.info("【食物匹配】parsed: name={}, amount={}", parsed.name(), parsed.amount());
+            log.info("【食物匹配】parsed: name={}, amount={}, unit={}", parsed.name(), parsed.amount(), parsed.unit());
             FoodItem foodItem = this.findStrictVisibleFood(userId, parsed.name());
             log.info("【食物匹配】name={}, matched={}", parsed.name(), foodItem != null ? foodItem.getName() : "null");
             if (foodItem == null || foodItem.getId() == null || !seenFoodIds.add(foodItem.getId())) continue;
             DietFoodItemRequest request = new DietFoodItemRequest();
             request.setFoodItemId(foodItem.getId());
             request.setAmount(parsed.amount());
+            request.setUnit(parsed.unit());
             matchedItems.add(request);
         }
         if (!matchedItems.isEmpty()) {

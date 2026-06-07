@@ -10,4 +10,7 @@ public class DietFoodItemRequest {
     private Long foodItemId;
 
     private BigDecimal amount;
+
+    /** 单位（g/ml/个/片/根 等） */
+    private String unit;
 }

@@ -262,6 +262,41 @@ public class DietRecordServiceImpl implements DietRecordService {
         }
     }
 
+    @Override
+    public int getMaxSortOrder(Long dietRecordId) {
+        LambdaQueryWrapper<DietRecordItem> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(DietRecordItem::getDietRecordId, dietRecordId)
+                .orderByDesc(DietRecordItem::getSortOrder)
+                .last("LIMIT 1");
+        DietRecordItem last = dietRecordItemMapper.selectOne(wrapper);
+        return last != null && last.getSortOrder() != null ? last.getSortOrder() : -1;
+    }
+
+    @Override
+    public void appendItems(Long dietRecordId, List<Map<String, Object>> items) {
+        if (items == null || items.isEmpty()) return;
+        for (Map<String, Object> item : items) {
+            DietRecordItem entity = new DietRecordItem();
+            entity.setDietRecordId(dietRecordId);
+            entity.setFoodItemId(toLong(item.get("foodItemId")));
+            entity.setName(toStringValue(item.get("name")));
+            entity.setUnit(toStringValue(item.get("unit")));
+            entity.setAmount(toBigDecimal(item.get("amount")));
+            entity.setCalories(toBigDecimal(item.get("calories")));
+            entity.setProtein(toBigDecimal(item.get("protein")));
+            entity.setCarbs(toBigDecimal(item.get("carbs")));
+            entity.setFat(toBigDecimal(item.get("fat")));
+            entity.setFiber(toBigDecimal(item.get("fiber")));
+            entity.setSortOrder(toInteger(item.get("sortOrder")));
+            dietRecordItemMapper.insert(entity);
+        }
+    }
+
+    @Override
+    public boolean updateRecord(DietRecord record) {
+        return dietRecordMapper.updateById(record) > 0;
+    }
+
     private List<Map<String, Object>> buildLegacyItems(List<DietRecordItem> items, Map<Long, String> foodImageMap) {
         if (items == null || items.isEmpty()) {
             return Collections.emptyList();
@@ -320,6 +355,16 @@ public class DietRecordServiceImpl implements DietRecordService {
             return Long.parseLong(text.trim());
         }
         return null;
+    }
+
+    private Integer toInteger(Object value) {
+        if (value instanceof Number number) {
+            return number.intValue();
+        }
+        if (value instanceof String text && !text.isBlank()) {
+            return Integer.parseInt(text.trim());
+        }
+        return 0;
     }
 
     private String toStringValue(Object value) {
