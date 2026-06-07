@@ -1187,7 +1187,7 @@ const ChatPage: React.FC = () => {
 
     const isPlanMessage = msg.sender === 'ai' && (msg.replyType === 'training_plan' || msg.replyType === 'diet_plan');
 
-    if (!isTodayExerciseRecordMessage(msg) && !isTodayDietRecordMessage(msg)) {
+    if (!isTodayExerciseRecordMessage(msg)) {
       if (msg.sender === 'ai' && msg.content) {
         return (
           <div className="chat-md-render">
