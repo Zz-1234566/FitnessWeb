@@ -4838,6 +4838,16 @@ implements ChatService {
                 result.put("textReply", "\u672a\u8bc6\u522b\u5230\u5065\u8eab\u5668\u68b0");
                 return result;
             }
+            // AI\u53ef\u80fd\u8fd4\u56de"\u8774\u8776\u673a/\u5939\u80f8\u673a"\uff0c\u6309/\u6216\uff0f\u62c6\u5206\uff0c\u53d6\u7b2c\u4e00\u4e2a\u4f5c\u4e3a\u4e3b\u540d\u79f0
+            String[] nameParts = equipmentName.split("[/\uff0f]");
+            String primaryEquipmentName = nameParts[0].trim();
+            if (primaryEquipmentName.isBlank()) {
+                primaryEquipmentName = equipmentName;
+            }
+            if (nameParts.length > 1) {
+                log.info("[EquipmentRecognition] userId={}, \u5668\u68b0\u540d\u62c6\u5206: '{}' -> '{}'", userId, equipmentName, primaryEquipmentName);
+            }
+            equipmentName = primaryEquipmentName;
             log.info("[EquipmentRecognition] userId={}, visionResult={}, elapsed={}ms", new Object[]{userId, equipmentName, System.currentTimeMillis() - start});
             String rawSearch = this.webSearchHelper.searchEquipmentInfo(equipmentName);
             log.info("[EquipmentRecognition] userId={}, searchDone={}, elapsed={}ms", new Object[]{userId, rawSearch != null ? "success" : "null", System.currentTimeMillis() - start});
