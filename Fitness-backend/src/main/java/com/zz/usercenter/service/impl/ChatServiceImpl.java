@@ -4876,6 +4876,13 @@ implements ChatService {
             String encodedName = java.net.URLEncoder.encode(equipmentName + " 使用教程", java.nio.charset.StandardCharsets.UTF_8);
             result.put("bilibiliUrl", "https://search.bilibili.com/all?keyword=" + encodedName);
             result.put("douyinUrl", "https://www.douyin.com/search/" + encodedName);
+            // 匹配动作库中用到该器械的动作
+            List<Exercise> matchedExercises = this.exerciseService.searchByEquipment(equipmentName);
+            if (matchedExercises != null && !matchedExercises.isEmpty()) {
+                result.put("matchedExercises", matchedExercises.stream()
+                    .map(e -> Map.of("name", e.getName(), "muscleGroup", e.getMuscleGroup() != null ? e.getMuscleGroup() : ""))
+                    .toList());
+            }
         }
         catch (Exception e) {
             log.error("\u5668\u68b0\u8bc6\u522b\u5931\u8d25", (Throwable)e);
