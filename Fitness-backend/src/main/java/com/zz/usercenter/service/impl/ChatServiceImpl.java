@@ -3015,13 +3015,31 @@ implements ChatService {
     private List<ParsedFoodAmount> parseDietFoodLine(String line) {
         String[] parts;
         ArrayList<ParsedFoodAmount> result = new ArrayList<ParsedFoodAmount>();
+        // 正则1：名称+数量+单位（如"燕麦60g"）
+        Pattern nameFirst = Pattern.compile("(.+?)(\\d+(?:\\.\\d+)?)(kg|g|ml|l|个|片|根|袋|份|只|枚)$");
+        // 正则2：数量+单位+名称（如"60g燕麦"）
+        Pattern amountFirst = Pattern.compile("^(\\d+(?:\\.\\d+)?)(kg|g|ml|l|个|片|根|袋|份|只|枚)(.+)$");
         for (String rawPart : parts = line.split("[+＋]")) {
             Matcher matcher;
             String part = this.sanitizeDietRecordText(rawPart);
-            if (part.isBlank() || !(matcher = Pattern.compile("(.+?)(\\d+(?:\\.\\d+)?)(kg|g|ml|l|个|片|根|袋|份|只|枚)$").matcher(part.replaceAll("\\s+", ""))).find()) continue;
-            String name = this.sanitizeDietRecordText(matcher.group(1));
-            BigDecimal amount = new BigDecimal(matcher.group(2));
-            String unit = matcher.group(3);
+            if (part.isBlank()) continue;
+            String compacted = part.replaceAll("\\s+", "");
+            String name;
+            BigDecimal amount;
+            String unit;
+            // 先尝试"名称+数量+单位"
+            if ((matcher = nameFirst.matcher(compacted)).find()) {
+                name = this.sanitizeDietRecordText(matcher.group(1));
+                amount = new BigDecimal(matcher.group(2));
+                unit = matcher.group(3);
+            } else if ((matcher = amountFirst.matcher(compacted)).find()) {
+                // 再尝试"数量+单位+名称"
+                amount = new BigDecimal(matcher.group(1));
+                unit = matcher.group(2);
+                name = this.sanitizeDietRecordText(matcher.group(3));
+            } else {
+                continue;
+            }
             if ("kg".equalsIgnoreCase(unit)) {
                 amount = amount.multiply(new BigDecimal("1000"));
                 unit = "g";
