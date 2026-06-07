@@ -6,6 +6,9 @@ import { MUSCLE_GROUP_LABELS } from '@/constants/exercise';
 import BilibiliIcon from '@/assets/icons/bilibili';
 import DouyinIcon from '@/assets/icons/douyin';
 import SaveIcon from '@/assets/icons/save';
+import ChatBubbleIcon from '@/assets/icons/chat-bubble';
+import SmartBulbIcon from '@/assets/icons/smart-bulb';
+import PurifyWrenchIcon from '@/assets/icons/purify-wrench';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import {
@@ -1383,7 +1386,7 @@ const ChatPage: React.FC = () => {
     <div className="model-config-panel">
       <div className="model-config-item">
         <div className="model-config-label">
-          <RobotOutlined style={{ marginRight: 6 }} />
+          <ChatBubbleIcon size={15} style={{ marginRight: 6, flexShrink: 0 }} />
           聊天模型
           <span className="model-config-hint">当前使用的对话模型</span>
         </div>
@@ -1398,7 +1401,7 @@ const ChatPage: React.FC = () => {
       </div>
       <div className="model-config-item">
         <div className="model-config-label">
-          <SettingOutlined style={{ marginRight: 6 }} />
+          <PurifyWrenchIcon size={15} style={{ marginRight: 6, flexShrink: 0 }} />
           提纯模型
           <span className="model-config-hint">工具决策 / 文本清洗</span>
         </div>
@@ -1413,7 +1416,7 @@ const ChatPage: React.FC = () => {
       </div>
       <div className="model-config-item">
         <div className="model-config-label">
-          <RobotOutlined style={{ marginRight: 6 }} />
+          <SmartBulbIcon size={15} style={{ marginRight: 6, flexShrink: 0 }} />
           聪明模型
           <span className="model-config-hint">最终回复生成</span>
         </div>
