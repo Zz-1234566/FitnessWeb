@@ -46,11 +46,14 @@ public class ModelController {
             models.add(m);
         }
 
-        Map<String, String> whisperEntry = new LinkedHashMap<>();
-        whisperEntry.put("name", aiModelConfig.getWhisper().getModel());
-        whisperEntry.put("label", aiModelConfig.getWhisper().getModel() + " (语音识别)");
-        whisperEntry.put("type", "asr");
-        models.add(whisperEntry);
+        // whisper 配置可能不存在（如生产环境未配置），需防御空指针
+        if (aiModelConfig.getWhisper() != null) {
+            Map<String, String> whisperEntry = new LinkedHashMap<>();
+            whisperEntry.put("name", aiModelConfig.getWhisper().getModel());
+            whisperEntry.put("label", aiModelConfig.getWhisper().getModel() + " (语音识别)");
+            whisperEntry.put("type", "asr");
+            models.add(whisperEntry);
+        }
 
         List<Map<String, String>> customModels = getCustomModels(user.getId());
         for (Map<String, String> cm : customModels) {
@@ -80,7 +83,7 @@ public class ModelController {
         }
 
         boolean isSystem = aiModelConfig.getProvider(modelName) != null
-                || modelName.equals(aiModelConfig.getWhisper().getModel());
+                || (aiModelConfig.getWhisper() != null && modelName.equals(aiModelConfig.getWhisper().getModel()));
         if (!isSystem) {
             List<Map<String, String>> customModels = getCustomModels(user.getId());
             boolean isCustom = customModels.stream().anyMatch(cm -> modelName.equals(cm.get("name")));
@@ -223,7 +226,8 @@ public class ModelController {
         config.put("defaultModel", prefs.getOrDefault("current", aiModelConfig.getDefaultModel()));
         config.put("purificationModel", prefs.getOrDefault("purificationModel", aiModelConfig.getPurificationModel()));
         config.put("chatModel", prefs.getOrDefault("chatModel", aiModelConfig.getChatModel()));
-        config.put("whisperModel", prefs.getOrDefault("whisperModel", aiModelConfig.getWhisper().getModel()));
+        config.put("whisperModel", prefs.getOrDefault("whisperModel",
+                aiModelConfig.getWhisper() != null ? aiModelConfig.getWhisper().getModel() : ""));
         config.put("visionModel", prefs.getOrDefault("visionModel",
                 (aiModelConfig.getVisionModel() != null && !aiModelConfig.getVisionModel().isBlank())
                         ? aiModelConfig.getVisionModel() : "glm-4v-flash"));
@@ -276,7 +280,8 @@ public class ModelController {
         // 全量保存，未传的字段用系统默认值兜底
         String pm = (purificationModel != null && !purificationModel.isBlank()) ? purificationModel : aiModelConfig.getPurificationModel();
         String cm = (chatModel != null && !chatModel.isBlank()) ? chatModel : aiModelConfig.getChatModel();
-        String wm = (whisperModel != null && !whisperModel.isBlank()) ? whisperModel : aiModelConfig.getWhisper().getModel();
+        String wm = (whisperModel != null && !whisperModel.isBlank()) ? whisperModel :
+                (aiModelConfig.getWhisper() != null ? aiModelConfig.getWhisper().getModel() : "");
         String vm = (visionModel != null && !visionModel.isBlank()) ? visionModel :
                 (aiModelConfig.getVisionModel() != null && !aiModelConfig.getVisionModel().isBlank())
                         ? aiModelConfig.getVisionModel() : "glm-4v-flash";
